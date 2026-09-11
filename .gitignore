@@ -1,0 +1,41 @@
+# dependencies
+node_modules/
+.pnp
+.pnp.js
+
+# next.js
+.next/
+.next-*/
+out/
+build/
+next-env.d.ts
+
+# local embedded database (PGlite)
+.pglite/
+.pglite.broken/
+
+# local uploads (until R2)
+public/uploads/*
+!public/uploads/.gitkeep
+
+# env
+.env
+.env.local
+.env.*.local
+!.env.example
+
+# testing / tooling
+coverage/
+*.tsbuildinfo
+.vitest/
+
+# os / editors
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/*
+!.vscode/extensions.json
+
+# logs
+*.log
+npm-debug.log*

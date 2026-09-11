@@ -1,0 +1,681 @@
+:root {
+  color-scheme: light dark;
+
+  --bg: #f6f6f4;
+  --panel: #ffffff;
+  --border: #dcdcd6;
+  --text: #1b1b19;
+  --muted: #6b6b64;
+  --accent: #3a6b4f;
+  --accent-text: #ffffff;
+  --danger: #9b2f2f;
+  --ok: #2f6b3a;
+  --mana: #2f6ba8;
+
+  --fire: #c4562c;
+  --water: #2f6ba8;
+  --plant: #3f7d3a;
+  --psychic: #7a4a9c;
+
+  --radius: 8px;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #17181a;
+    --panel: #202225;
+    --border: #34363a;
+    --text: #ececea;
+    --muted: #9a9a94;
+    --accent: #6aa585;
+    --accent-text: #10231a;
+    --danger: #d98080;
+    --ok: #8fce9c;
+    --mana: #6fb2ff;
+  }
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font: 15px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif;
+}
+
+a {
+  color: inherit;
+}
+
+h1,
+h2,
+h3 {
+  margin: 0 0 0.5rem;
+  line-height: 1.2;
+}
+
+h1 {
+  font-size: 1.5rem;
+}
+h2 {
+  font-size: 1.15rem;
+}
+
+.shell {
+  max-width: 1100px;
+  margin: 0 auto;
+  padding: 1.5rem 1.25rem 4rem;
+}
+
+.topbar {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  border-bottom: 1px solid var(--border);
+  padding: 0.75rem 1.25rem;
+  background: var(--panel);
+}
+
+.topbar strong {
+  letter-spacing: 0.02em;
+}
+
+.topbar nav {
+  display: flex;
+  gap: 1rem;
+  margin-left: auto;
+  font-size: 0.9rem;
+}
+
+.card {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 1.1rem;
+  margin-bottom: 1rem;
+}
+
+.row {
+  display: flex;
+  gap: 1rem;
+  flex-wrap: wrap;
+  align-items: flex-end;
+}
+
+.grid {
+  display: grid;
+  gap: 1rem;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+}
+
+label {
+  display: block;
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: var(--muted);
+  margin-bottom: 0.3rem;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+input[type="text"],
+input[type="number"],
+input[type="search"],
+input[type="file"],
+select,
+textarea {
+  width: 100%;
+  padding: 0.5rem 0.6rem;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg);
+  color: var(--text);
+  font: inherit;
+}
+
+textarea {
+  min-height: 5rem;
+  resize: vertical;
+}
+
+.field {
+  margin-bottom: 0.9rem;
+}
+
+.checkbox {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.checkbox label {
+  margin: 0;
+  text-transform: none;
+  letter-spacing: 0;
+  font-size: 0.95rem;
+  color: var(--text);
+}
+
+button,
+.btn {
+  display: inline-block;
+  padding: 0.5rem 0.9rem;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--panel);
+  color: var(--text);
+  font: inherit;
+  cursor: pointer;
+  text-decoration: none;
+}
+
+button:hover,
+.btn:hover {
+  border-color: var(--muted);
+}
+
+button[disabled] {
+  opacity: 0.55;
+  cursor: progress;
+}
+
+.btn-primary {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--accent-text);
+  font-weight: 600;
+}
+
+.btn-danger {
+  color: var(--danger);
+}
+
+.muted {
+  color: var(--muted);
+}
+
+.small {
+  font-size: 0.85rem;
+}
+
+.tag {
+  display: inline-block;
+  padding: 0.1rem 0.5rem;
+  border-radius: 999px;
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: #fff;
+}
+
+.tag-fire {
+  background: var(--fire);
+}
+.tag-water {
+  background: var(--water);
+}
+.tag-plant {
+  background: var(--plant);
+}
+.tag-psychic {
+  background: var(--psychic);
+}
+.tag-muted {
+  background: var(--muted);
+}
+
+.readonly {
+  padding: 0.5rem 0.6rem;
+  border: 1px dashed var(--border);
+  border-radius: 6px;
+  color: var(--muted);
+  background: transparent;
+}
+
+.notice {
+  padding: 0.6rem 0.8rem;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  margin-bottom: 1rem;
+}
+
+.notice-ok {
+  border-color: var(--ok);
+  color: var(--ok);
+}
+
+.notice-error {
+  border-color: var(--danger);
+  color: var(--danger);
+}
+
+.error {
+  color: var(--danger);
+  font-size: 0.82rem;
+  margin-top: 0.25rem;
+}
+
+.species-card {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+
+.thumb {
+  width: 100%;
+  height: 130px;
+  object-fit: contain;
+  border-radius: 6px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+}
+
+.thumb-empty {
+  display: grid;
+  place-items: center;
+  color: var(--muted);
+  font-size: 0.8rem;
+}
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+th,
+td {
+  text-align: left;
+  padding: 0.5rem 0.4rem;
+  border-bottom: 1px solid var(--border);
+  vertical-align: middle;
+}
+
+th {
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--muted);
+}
+
+/* ---- brand ---- */
+
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  text-decoration: none;
+}
+
+.brand-mark {
+  width: 32px;
+  height: 32px;
+  object-fit: contain;
+}
+
+.brand-full {
+  width: auto;
+  height: 26px;
+  object-fit: contain;
+}
+
+@media (max-width: 520px) {
+  .brand-full {
+    display: none;
+  }
+}
+
+.hero {
+  text-align: center;
+  display: grid;
+  gap: 1rem;
+  justify-items: center;
+  padding: 2rem 0 1rem;
+}
+
+.hero-logo {
+  width: min(100%, 520px);
+  height: auto;
+}
+
+.hero .row {
+  justify-content: center;
+}
+
+/* ---- battle: the arena ---- */
+
+.battle {
+  display: grid;
+  gap: 0.6rem;
+  max-width: 520px;
+  margin: 0 auto;
+}
+
+.hud {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  font-weight: 700;
+  font-size: 0.95rem;
+}
+
+.hud-heart {
+  color: var(--danger);
+}
+
+.hud-shield {
+  color: var(--mana);
+  font-weight: 600;
+}
+
+.hud-turn {
+  color: var(--muted);
+  font-weight: 500;
+  font-size: 0.8rem;
+}
+
+.hud-right {
+  color: var(--muted);
+  font-weight: 500;
+  font-size: 0.85rem;
+}
+
+/*
+ * A duel between two lineups: the rival's column on the LEFT, yours on the
+ * RIGHT, a divider between them. Reading it as rows would hide whose creature
+ * is whose, which is the one thing this layout has to make obvious.
+ */
+.arena {
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.9rem 0.6rem;
+  border-radius: var(--radius);
+  background:
+    radial-gradient(120% 90% at 50% 0%, #4b3a7a 0%, #2a2450 45%, #171633 100%),
+    #171633;
+  box-shadow: inset 0 -18px 30px rgb(0 0 0 / 0.35);
+}
+
+.arena-team {
+  display: grid;
+  gap: 0.8rem;
+  min-width: 0;
+}
+
+/* The only two lives in the battle, side by side above the lineups. */
+.lifebars {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.6rem;
+}
+
+.lifebars .bar {
+  height: 12px;
+}
+
+.lifebars .bar-fill-right {
+  margin-left: auto;
+}
+
+.fighter-stat {
+  font-size: 0.72rem;
+  color: #cfc6e8;
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+}
+
+.arena-vs {
+  font-weight: 800;
+  font-size: 0.8rem;
+  letter-spacing: 0.08em;
+  color: #b9aee0;
+  text-shadow: 0 1px 3px rgb(0 0 0 / 0.8);
+  padding: 0 0.15rem;
+}
+
+.fighter {
+  display: grid;
+  justify-items: center;
+  gap: 0.25rem;
+  min-width: 0;
+}
+
+.fighter-art {
+  width: 100%;
+  max-width: 84px;
+  height: auto;
+  filter: drop-shadow(0 4px 6px rgb(0 0 0 / 0.5));
+}
+
+/* Each lineup looks across the divider at the other. */
+.arena-mine .fighter-art {
+  transform: scaleX(-1);
+}
+
+.fighter-name {
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: #f2eefc;
+  text-shadow: 0 1px 2px rgb(0 0 0 / 0.7);
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.fighter .bar {
+  width: 100%;
+  max-width: 140px;
+}
+
+/* The one taking the damage this turn. */
+.fighter-targeted .fighter-art {
+  filter: drop-shadow(0 0 10px #ff9a9a) drop-shadow(0 4px 6px rgb(0 0 0 / 0.5));
+}
+
+.fighter-down {
+  opacity: 0.28;
+  filter: grayscale(1);
+}
+
+.board-hint {
+  text-align: center;
+  margin: 0;
+}
+
+/* ---- the board ---- */
+
+.board {
+  /*
+   * Gems are positioned absolutely inside this box and moved with transforms,
+   * so the grid is a coordinate space rather than a list of cells. That is what
+   * lets a stone KEEP ITS IDENTITY and travel when the column collapses.
+   */
+  position: relative;
+  overflow: hidden;
+  width: 100%;
+  max-width: min(100%, 92vmin, 68vh);
+  margin: 0 auto;
+  padding: 5px;
+  border-radius: var(--radius);
+  background: linear-gradient(160deg, #2c2f36, #1a1c21);
+  box-shadow:
+    inset 0 2px 14px rgb(0 0 0 / 0.55),
+    0 2px 10px rgb(0 0 0 / 0.2);
+  touch-action: none;
+}
+
+.gem-tile {
+  position: absolute;
+  top: 5px;
+  left: 5px;
+  width: calc((100% - 10px) / var(--cols));
+  height: calc((100% - 10px) / var(--rows));
+  padding: 2px;
+  margin: 0;
+  border: 0;
+  background: none;
+  cursor: grab;
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+
+  /*
+   * The gem's own size is one cell, so translating by 100% moves it exactly one
+   * square. `--nudge-*` rides on top for the live drag.
+   */
+  transform: translate(
+      calc(var(--col) * 100% + var(--nudge-x, 0px)),
+      calc(var(--row) * 100% + var(--nudge-y, 0px))
+    )
+    scale(var(--scale, 1));
+
+  /* Falls accelerate, then settle just past the mark — that reads as weight. */
+  transition: transform var(--move-ms, 260ms) cubic-bezier(0.36, 0, 0.42, 1.12);
+  will-change: transform;
+}
+
+.gem-tile:active {
+  cursor: grabbing;
+}
+
+.gem {
+  width: 100%;
+  height: 100%;
+  display: block;
+  pointer-events: none;
+  filter: drop-shadow(0 2px 2px rgb(0 0 0 / 0.4));
+}
+
+.gem-selected {
+  z-index: 3;
+}
+
+.gem-selected .gem {
+  filter: drop-shadow(0 0 7px var(--accent)) drop-shadow(0 2px 2px rgb(0 0 0 / 0.4));
+}
+
+/* Dragging: no transition, the gem must track the finger exactly. */
+.gem-nudged {
+  z-index: 4;
+  transition: none;
+}
+
+.gem-nudged .gem {
+  filter: drop-shadow(0 7px 7px rgb(0 0 0 / 0.5));
+}
+
+/* Crushed out of existence, in place, before the column collapses. */
+.gem-dying {
+  z-index: 2;
+  pointer-events: none;
+  animation: gem-crush 320ms ease-in forwards;
+}
+
+@keyframes gem-crush {
+  0% {
+    --scale: 1;
+    opacity: 1;
+    filter: brightness(1);
+  }
+  35% {
+    opacity: 1;
+    transform: translate(calc(var(--col) * 100%), calc(var(--row) * 100%)) scale(1.22);
+    filter: brightness(1.9);
+  }
+  100% {
+    opacity: 0;
+    transform: translate(calc(var(--col) * 100%), calc(var(--row) * 100%)) scale(0.05)
+      rotate(20deg);
+    filter: brightness(1.9);
+  }
+}
+
+/*
+ * REDUCED motion, not ABSENT motion.
+ *
+ * Cutting these to 1ms turned every move into a jump — and the board becomes
+ * unreadable, because a match-3 has to show WHICH gems fell and where. So the
+ * preference shortens the travel and drops the bounce instead of removing the
+ * movement, which is what "reduce" asks for.
+ *
+ * Worth knowing while debugging: headless Chrome reports `reduce` by DEFAULT,
+ * so a screenshot tool will silently measure this branch unless it emulates
+ * `no-preference`.
+ */
+@media (prefers-reduced-motion: reduce) {
+  .gem-tile {
+    transition-duration: 130ms;
+    transition-timing-function: ease-out;
+  }
+  .gem-dying {
+    animation-duration: 150ms;
+  }
+}
+
+/* ---- bars ---- */
+
+.bar {
+  position: relative;
+  height: 16px;
+  border-radius: 999px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  overflow: hidden;
+}
+
+.bar-fill {
+  height: 100%;
+  transition: width 0.35s ease;
+}
+
+.bar-text {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  font-size: 0.7rem;
+  font-weight: 700;
+  color: var(--text);
+}
+
+.picker {
+  width: 100%;
+  font: inherit;
+  color: inherit;
+}
+
+.picker-on {
+  border-color: var(--accent);
+  box-shadow: inset 0 0 0 2px var(--accent);
+}
+
+.creature-thumb {
+  width: 100%;
+  height: 120px;
+}
+
+/* ---- phones ---- */
+
+@media (max-width: 560px) {
+  .shell {
+    padding: 0.9rem 0.7rem 3rem;
+  }
+  .card {
+    padding: 0.8rem;
+  }
+  .grid {
+    grid-template-columns: 1fr 1fr;
+    gap: 0.6rem;
+  }
+  h1 {
+    font-size: 1.25rem;
+  }
+}
