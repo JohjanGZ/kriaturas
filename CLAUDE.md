@@ -741,9 +741,33 @@ against.
   white species really comes out white.
 - The evolved element shown in the form is **read-only and derived**. It is never submitted;
   the server derives it again from the base element to create the default path.
-- Uploads go through the `ImageStorage` interface (`lib/storage`). The local adapter names
-  files with a server-generated UUID — never the client's filename — and re-checks type and
-  size. R2 later replaces that one file.
+- Uploads go through the `ImageStorage` interface (`lib/storage`). Both adapters name files
+  with a server-generated UUID — never the client's filename — and re-check type and size.
+
+### Images: the disk locally, Cloudinary on a server
+
+`lib/storage/index.ts` is the only place that chooses, the same shape as `db/client.ts`, and
+the ENVIRONMENT decides: Cloudinary when its three credentials are present, the local disk
+otherwise. A laptop needs no account; a hosted deploy has no writable filesystem at all, so up
+there the variables are what make uploads possible.
+
+- **No SDK.** The upload is one signed POST and the delete is another, so a dependency would buy
+  nothing and carry its own update treadmill. `fetch`, `FormData` and `node:crypto` cover it.
+- **What is stored is the `public_id`, not a URL.** A URL in the database freezes today's host,
+  today's CDN and today's transformation; an id lets `urlFor` decide all three at render time —
+  which is how `f_auto,q_auto` reaches every image ever uploaded without a migration. On a phone
+  over mobile data that is the difference between artwork that appears and artwork that loads.
+- **The signature is the one thing worth testing** (`tests/cloudinary.test.ts`): sorted params
+  joined as `k=v&k=v` with the secret appended, SHA-1, and `file`, `api_key`, `resource_type`
+  and `cloud_name` never signed. Get any of it wrong and the API says only "Invalid Signature",
+  which does not say which of the four mistakes it was.
+- **All three credentials or none.** A cloud name with no secret cannot sign, and an adapter that
+  half-configures itself fails inside an upload rather than at the one moment anybody is looking.
+- **A failed delete is logged, not thrown.** The caller is deleting a species or replacing a
+  drawing; refusing that because a remote file could not be tidied is the wrong trade — an orphan
+  costs storage and nothing else.
+- The API key is public and lives in `.env.example`. **The secret is not**: it belongs in the
+  host's environment variables, never in the repo.
 
 ## Identity — a door, not a login
 

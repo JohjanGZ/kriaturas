@@ -14,10 +14,10 @@ Tres cosas del proyecto cambian al salir del portátil:
    desactivado a propósito. Por eso existe **`/entrar`**: un botón que crea una partida de
    invitada y te deja su cookie. Sin eso, el juego desplegado le diría «no hay jugador» a todo
    el mundo.
-3. **No se pueden subir imágenes.** El adaptador local escribe en `public/uploads`, y en un
-   servidor de este tipo el disco es de solo lectura. El juego funciona entero; lo único que
-   falla es subir dibujos desde el panel, y lo dice con ese mensaje en vez de reventar. Sube el
-   arte en local, o monta el adaptador de R2.
+3. **Las imágenes van a Cloudinary.** El adaptador local escribe en `public/uploads`, y en un
+   servidor de este tipo el disco es de solo lectura. Con las tres variables de Cloudinary
+   puestas, las subidas van allí; sin ellas se usa el disco y en el servidor fallan con un
+   mensaje que lo explica.
 
 ## Pasos
 
@@ -62,6 +62,9 @@ git push
    | ------ | ----- |
    | `DATABASE_URL` | la cadena de Neon, la misma del paso 2 |
    | `ALLOW_ADMIN_ENTRY` | `true` **solo si** quieres llegar al panel desde el móvil |
+   | `CLOUDINARY_CLOUD_NAME` | el *cloud name* de tu cuenta de Cloudinary |
+   | `CLOUDINARY_API_KEY` | la clave pública (numérica) |
+   | `CLOUDINARY_API_SECRET` | el secreto — solo aquí, nunca en el repo |
 
 5. **Deploy**. En un par de minutos tienes una URL tipo `kriaturas.vercel.app`.
 
