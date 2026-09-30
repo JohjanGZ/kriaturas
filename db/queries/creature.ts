@@ -29,71 +29,12 @@ import { adjustmentFor, loadSeasonBalance } from './season';
  * `core/battle` and `db/queries/battle.ts`. Nothing may write `is_evolved`.
  */
 
-export type CreatureListItem = {
-  id: string;
-  name: string;
-  speciesName: string;
-  /** Null for a white creature: no stone has given it one yet. */
-  element: string | null;
-  attack: number;
-  manaCost: number;
-  /** What the running season adds or takes away. Zero when nothing is tuned. */
-  attackDelta: number;
-  manaCostDelta: number;
-  /** The rare mark. In battle it transforms into the SUPERIOR element. */
-  isExcellent: boolean;
-  lastFed: Date;
-};
-
-export async function listPlayerCreatures(playerId: string): Promise<CreatureListItem[]> {
-  const db = await getDb();
-  const rows = await db
-    .select({
-      id: creatures.id,
-      nickname: creatures.nickname,
-      lastFed: creatures.lastFed,
-      isExcellent: creatures.isExcellent,
-      speciesName: species.name,
-      speciesElement: species.baseElement,
-      /** What a stone gave it, if anything. Null for every ordinary creature. */
-      awakenedElement: creatures.element,
-      attack: species.baseAttack,
-      manaCost: species.manaCost,
-      speciesId: creatures.speciesId,
-    })
-    .from(creatures)
-    .innerJoin(species, eq(species.id, creatures.speciesId))
-    .where(eq(creatures.playerId, playerId))
-    .orderBy(asc(creatures.createdAt));
-
-  /**
-   * THE SEASON IS SHOWN WHERE THE PLAYER CHOOSES, not only where the battle
-   * resolves. A roster printing the species numbers while the fight uses tuned
-   * ones is a roster that lies.
-   */
-  const balance = await loadSeasonBalance();
-
-  return rows.map((row) => {
-    /** Effective, not raw: an excellent creature ignores the season's nerfs. */
-    const adjustment = effectiveAdjustment(adjustmentFor(balance, row.speciesId), {
-      excellent: row.isExcellent,
-    });
-    const tuned = applyAdjustment({ attack: row.attack, manaCost: row.manaCost }, adjustment);
-    return {
-      id: row.id,
-      name: row.nickname ?? row.speciesName,
-      speciesName: row.speciesName,
-      /** Null means WHITE: it has no element yet, so it cannot be played. */
-      element: resolveElement(row.speciesElement, row.awakenedElement),
-      attack: tuned.attack,
-      manaCost: tuned.manaCost,
-      attackDelta: adjustment.attackDelta,
-      manaCostDelta: adjustment.manaCostDelta,
-      isExcellent: row.isExcellent,
-      lastFed: row.lastFed,
-    };
-  });
-}
+/**
+ * El listado del roster vivía aquí y ya no existe: el CORRAL es "mis
+ * kriaturas". Todo lo que enseñaba --elemento, marca, números ajustados por la
+ * temporada, stamina y el botón de cuidar-- lo enseña ahora `getCorralShelf`,
+ * pero como un sitio donde los bichos están en vez de como una tabla.
+ */
 
 export type PathView = {
   id: string;

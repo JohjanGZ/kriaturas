@@ -204,6 +204,12 @@ export function Pen({ shelf }: { shelf: CorralShelf }) {
                 {chosen.element ?? 'sin elemento — necesita una piedra'}
               </div>
               <div className="small">
+                Ataque {chosen.attack} · maná {chosen.manaCost}
+                {chosen.attackDelta !== 0 || chosen.manaCostDelta !== 0 ? (
+                  <span className="season-tuned"> · ajustada esta temporada</span>
+                ) : null}
+              </div>
+              <div className="small">
                 Stamina {chosen.stamina}/{chosen.maxStamina}
                 {chosen.sickSince
                   ? ' — enferma, con el techo bajo'

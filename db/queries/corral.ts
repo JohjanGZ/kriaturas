@@ -1,10 +1,12 @@
 import { and, asc, eq, isNotNull, isNull } from 'drizzle-orm';
 import { resolveElement } from '@/core/elements';
+import { applyAdjustment, effectiveAdjustment } from '@/core/balance';
 import { staminaCeiling } from '@/core/health';
 import { deriveStamina } from '@/core/stamina';
 import { getDb } from '../client';
 import { corrals, creatures, players, species } from '../schema';
 import { loadGameConfig } from './battle';
+import { adjustmentFor, loadSeasonBalance } from './season';
 
 /**
  * THE CORRAL — where the kriaturas live.
@@ -32,6 +34,16 @@ export type PennedCreature = {
   sickSince: Date | null;
   /** Lo que cuesta curarla de golpe, sin pasar por las misiones. */
   curePrice: number;
+  /**
+   * Los números con los que se compara una kriatura, YA AJUSTADOS por la
+   * temporada. El corral sustituye al listado de "mis kriaturas", así que tiene
+   * que heredar lo que aquello enseñaba: un sitio que imprime los números de la
+   * ficha mientras el combate usa otros es un sitio que miente.
+   */
+  attack: number;
+  manaCost: number;
+  attackDelta: number;
+  manaCostDelta: number;
   imageUrl: string | null;
 };
 
@@ -79,11 +91,17 @@ export async function getCorralShelf(playerId: string, now: Date): Promise<Corra
       speciesName: species.name,
       speciesElement: species.baseElement,
       imagePath: species.baseImagePath,
+      speciesId: creatures.speciesId,
+      attack: species.baseAttack,
+      manaCost: species.manaCost,
     })
     .from(creatures)
     .innerJoin(species, eq(species.id, creatures.speciesId))
     .where(eq(creatures.playerId, playerId))
     .orderBy(asc(creatures.createdAt));
+
+  /** La temporada se aplica donde el jugador ELIGE, no solo donde se resuelve. */
+  const balance = await loadSeasonBalance();
 
   /** Stamina is DERIVED for this render, never read from a column. */
   const toView = (row: (typeof rows)[number]): PennedCreature => {
@@ -94,10 +112,20 @@ export async function getCorralShelf(playerId: string, now: Date): Promise<Corra
       config.stamina,
       staminaCeiling(sick, config.health, config.stamina),
     );
+    /** Efectivo, no bruto: una excelente ignora los nerfeos de la temporada. */
+    const adjustment = effectiveAdjustment(adjustmentFor(balance, row.speciesId), {
+      excellent: row.isExcellent,
+    });
+    const tuned = applyAdjustment({ attack: row.attack, manaCost: row.manaCost }, adjustment);
+
     return {
       id: row.id,
       name: row.nickname ?? row.speciesName,
       speciesName: row.speciesName,
+      attack: tuned.attack,
+      manaCost: tuned.manaCost,
+      attackDelta: adjustment.attackDelta,
+      manaCostDelta: adjustment.manaCostDelta,
       element: resolveElement(row.speciesElement, row.awakenedElement),
       isExcellent: row.isExcellent,
       stamina: stamina.current,

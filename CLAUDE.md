@@ -843,8 +843,16 @@ coins are paid for the win, both inside the transaction that resolved the move.
 
 ## Caring and evolving
 
-`/kriaturas` lists the roster with stamina derived per render; `/kriaturas/[id]` feeds and shows
-what the creature would transform into. Neither can evolve anything: that happens in a battle.
+**`/corral` ES "mis kriaturas".** El listado que vivía en `/kriaturas` ya no existe: enseñaba lo
+mismo —elemento, marca ✦, números ajustados por la temporada, stamina y el botón de cuidar— pero
+como una tabla, y el corral lo enseña como un sitio donde los bichos están, que es lo que son.
+
+La ruta vieja se queda como **redirección**, no borrada: hay enlaces, marcadores y
+`revalidatePath` apuntando ahí, y un 404 por una reorganización nuestra es un problema que le
+creamos al jugador.
+
+`/kriaturas/[id]` sigue siendo la ficha: alimenta y muestra en qué se transformaría. Ninguna de
+las dos puede evolucionar nada — eso pasa dentro de una batalla.
 
 ### Seasons — nerfing and buffing without touching a species
 

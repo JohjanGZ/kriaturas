@@ -1,4 +1,3 @@
-import Link from 'next/link';
 import { redirect } from 'next/navigation';
 import { getCorralShelf, giveStarterCorral } from '@/db/queries/corral';
 import { getCurrentPlayer, hasDevFallback } from '@/lib/auth';
@@ -39,9 +38,6 @@ export default async function CorralPage() {
 
   return (
     <main className="shell">
-      <p className="small">
-        <Link href="/kriaturas">← Mis kriaturas</Link>
-      </p>
       <h1>Corral</h1>
       <Pen shelf={shelf} />
     </main>

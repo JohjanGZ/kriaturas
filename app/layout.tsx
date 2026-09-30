@@ -44,7 +44,6 @@ export default async function RootLayout({ children }: { children: ReactNode }) 
           <nav>
             <Link href="/jugar">Jugar</Link>
             <Link href="/corral">Corral</Link>
-            <Link href="/kriaturas">Mis kriaturas</Link>
             <Link href="/huevos">Incubadora</Link>
 
             {admin ? (

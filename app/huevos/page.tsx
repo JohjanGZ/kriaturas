@@ -35,7 +35,7 @@ export default async function EggsPage() {
   return (
     <main className="shell">
       <p className="small">
-        <Link href="/kriaturas">← Mis kriaturas</Link>
+        <Link href="/corral">← Corral</Link>
       </p>
       <h1>Incubadora</h1>
       <Shelf shelf={shelf} />

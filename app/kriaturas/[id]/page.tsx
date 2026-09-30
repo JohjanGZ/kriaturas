@@ -21,7 +21,7 @@ export default async function CreaturePage({ params }: { params: Promise<{ id: s
   return (
     <main className="shell">
       <p className="small">
-        <Link href="/kriaturas">← Mis kriaturas</Link>
+        <Link href="/corral">← Corral</Link>
       </p>
 
       <div className="row" style={{ alignItems: 'center', gap: '0.8rem' }}>
