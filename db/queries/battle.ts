@@ -40,7 +40,9 @@ import { parseEffectList } from '@/core/effects/schema';
 import {
   type BaseElement,
   canFight,
+  firstDuplicateElement,
   isBaseElement,
+  resolveElement,
   superiorElementFor,
 } from '@/core/elements';
 import { advanceObjective } from '@/core/objectives';
@@ -345,6 +347,7 @@ export type StartBattleFailure =
   | 'battle_already_active'
   | 'not_enough_stamina'
   | 'creature_has_no_element'
+  | 'duplicate_element'
   | 'no_enemies_available';
 
 export type StartBattleResult =
@@ -419,6 +422,26 @@ export async function startBattle(
    */
   if (roster.some((row) => !canFight(row.speciesElement, row.awakenedElement))) {
     return { ok: false, reason: 'creature_has_no_element' };
+  }
+
+  /**
+   * ONE ELEMENT PER TEAM, enforced HERE and not only in the picker.
+   *
+   * A gem charges every creature of its element at once, so a pair sharing one
+   * element fills both bars off the same match — double value per gem, and the
+   * "which bar do I feed" decision gone. The browser draws the rule; this is
+   * what makes it true, because the client sends creature ids and a crafted
+   * request would otherwise walk straight past the disabled buttons.
+   */
+  const repeated = firstDuplicateElement(
+    roster.map((row) => resolveElement(row.speciesElement, row.awakenedElement)),
+  );
+  if (repeated) {
+    return {
+      ok: false,
+      reason: 'duplicate_element',
+      detail: `Dos kriaturas de ${repeated}: una gema cargaría las dos barras a la vez`,
+    };
   }
 
   /** Every creature must be rested enough, before anything is written. */

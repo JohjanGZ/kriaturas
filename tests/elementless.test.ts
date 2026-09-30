@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { canFight, resolveElement } from '@/core/elements';
+import { canFight, firstDuplicateElement, resolveElement } from '@/core/elements';
 
 /**
  * THE WHITE CREATURE — born with no element, useless until a stone gives it one.
@@ -41,5 +41,40 @@ describe('canFight', () => {
     expect(canFight(null, 'fire')).toBe(true);
     /** White: no gem on the board would ever charge it. */
     expect(canFight(null, null)).toBe(false);
+  });
+});
+
+/**
+ * ONE ELEMENT PER TEAM.
+ *
+ * A gem charges every creature of its element at once, so a pair sharing an
+ * element is worth double per gem and deletes the decision the turn is built
+ * around. The picker draws the rule and `startBattle` enforces it — both ask
+ * this, so they cannot drift apart.
+ */
+describe('firstDuplicateElement', () => {
+  it('is null for a team with one of each', () => {
+    expect(firstDuplicateElement(['fire', 'water'])).toBeNull();
+    expect(firstDuplicateElement(['fire', 'water', 'plant', 'psychic'])).toBeNull();
+  });
+
+  it('names the element that repeats', () => {
+    expect(firstDuplicateElement(['fire', 'fire'])).toBe('fire');
+    expect(firstDuplicateElement(['water', 'plant', 'water'])).toBe('water');
+  });
+
+  it('reports the FIRST repeat, so the message can name it', () => {
+    expect(firstDuplicateElement(['plant', 'fire', 'fire', 'plant'])).toBe('fire');
+  });
+
+  it('ignores the creatures that have no element at all', () => {
+    /** Two white ones are not "two of the same": they charge on nothing. */
+    expect(firstDuplicateElement([null, null])).toBeNull();
+    expect(firstDuplicateElement(['fire', null, undefined])).toBeNull();
+  });
+
+  it('says nothing about a team of one, or of none', () => {
+    expect(firstDuplicateElement(['fire'])).toBeNull();
+    expect(firstDuplicateElement([])).toBeNull();
   });
 });

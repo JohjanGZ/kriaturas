@@ -236,6 +236,21 @@ a client to lie about.
 `play.teamSize` (2) and `play.defaultManaCost` (12) are config. The board carries four base
 elements, so a team smaller than four leaves elements that charge nobody — a deliberate tuning
 choice, which is why it is a row and not a constant.
+
+#### ONE ELEMENT PER TEAM
+
+Two creatures of the same element are refused (`firstDuplicateElement`). A gem charges EVERY
+creature of its element at once, so a pair sharing one element fills both bars off a single
+match: double value per gem, and the decision the turn is built around — *which bar do I feed* —
+simply gone, because both bars answer to the same gem.
+
+The terminal simulator enforced this from the day it was written; the web battle did not, which
+is the same gap the dead-board reshuffle had. Both sides now ask ONE function: the picker greys
+out an element already taken and says why, and `startBattle` refuses it regardless, because the
+client sends creature ids and a crafted request walks straight past a disabled button.
+
+A white creature is not "the same element as another white one": it charges on nothing, so it is
+skipped rather than counted as a duplicate — it is already refused for having no element.
 - A result carries `settled: false` when the cascade cap stopped the loop with runs still on
   the board; the caller must resolve again or reshuffle rather than hand that to the player.
 

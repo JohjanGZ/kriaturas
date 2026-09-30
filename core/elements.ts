@@ -115,5 +115,31 @@ export function canFight(
 ): boolean {
   return resolveElement(speciesBaseElement, creatureElement) !== null;
 }
+
+/**
+ * ONE ELEMENT PER TEAM. The first element that appears twice, or null.
+ *
+ * A gem charges EVERY creature of its element at once, so a pair sharing one
+ * element is worth double per gem — and, worse, it deletes the decision the
+ * turn is built around. "Which bar do I feed" stops being a question when both
+ * bars answer to the same gem, and three quarters of the board stops mattering
+ * at all.
+ *
+ * The terminal simulator has enforced this since it was written; the web battle
+ * did not, which is how a team of two Brasillas could charge twice as fast as
+ * anybody else's. One function so the picker and the server cannot disagree:
+ * the client is what DRAWS the rule, `startBattle` is what enforces it.
+ */
+export function firstDuplicateElement(
+  elements: readonly (string | null | undefined)[],
+): string | null {
+  const seen = new Set<string>();
+  for (const element of elements) {
+    if (!element) continue;
+    if (seen.has(element)) return element;
+    seen.add(element);
+  }
+  return null;
+}
 export const evolvedElementSchema = z.enum(EVOLVED_ELEMENTS);
 export const elementSchema = z.enum(ELEMENTS);

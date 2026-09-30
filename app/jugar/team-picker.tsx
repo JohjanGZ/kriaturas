@@ -85,6 +85,21 @@ export function TeamPicker({
 
   const ready = picked.length === teamSize;
 
+  /**
+   * Elements already spoken for.
+   *
+   * A gem charges EVERY creature of its element at once, so a second creature
+   * of an element you already picked would fill both bars off the same match —
+   * double value per gem, and the decision the turn is built around gone. The
+   * server refuses it too; this is so nobody has to find that out by being
+   * rejected after choosing.
+   */
+  const taken = new Set(
+    picked
+      .map((id) => creatures.find((creature) => creature.id === id)?.element)
+      .filter((element): element is string => Boolean(element)),
+  );
+
   return (
     <form action={formAction}>
       {state.message ? (
@@ -105,7 +120,12 @@ export function TeamPicker({
            * mechanic: no gem on the board charges it, so it cannot come.
            */
           const white = creature.element === null;
-          const usable = creature.canPlay && !white;
+          /** Its element is already on the team — and it is not the one picked. */
+          const repeated =
+            creature.element !== null &&
+            taken.has(creature.element) &&
+            !isPicked;
+          const usable = creature.canPlay && !white && !repeated;
           return (
             <button
               type="button"
@@ -147,9 +167,11 @@ export function TeamPicker({
               <span className="small muted">
                 {white
                   ? 'Necesita una piedra elemental para poder luchar'
-                  : `Stamina ${creature.stamina}/${creature.maxStamina}${
-                      creature.canPlay ? '' : ' — agotada'
-                    }`}
+                  : repeated
+                    ? `Ya llevas una kriatura de ${creature.element}: una gema cargaría las dos`
+                    : `Stamina ${creature.stamina}/${creature.maxStamina}${
+                        creature.canPlay ? '' : ' — agotada'
+                      }`}
               </span>
             </button>
           );
