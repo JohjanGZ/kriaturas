@@ -84,8 +84,39 @@ const pickIndex = (length: number, random: () => number): number =>
   Math.min(length - 1, Math.max(0, Math.floor(random() * length)));
 
 /** The field for a battle in this mode. Rolled by the SERVER, like everything. */
-export function rollField(random: () => number): BattleField {
-  const kind = FIELD_KINDS[pickIndex(FIELD_KINDS.length, random)] ?? 'remolino';
+export type FieldChoice = { kind: FieldKind; weight: number };
+
+export function rollField(
+  random: () => number,
+  /**
+   * Which fields may come up, and how often. Absent means all ten, evenly —
+   * the behaviour before the admin could switch one off.
+   *
+   * A weighted draw and not a filter, because "off" and "rare" are different
+   * answers to the same complaint: a field that turns out to be unfun can be
+   * disabled, and one that is merely strong can just come up less. Both are
+   * rows, so neither needs a deploy.
+   */
+  choices?: readonly FieldChoice[],
+): BattleField {
+  const allowed = (choices ?? FIELD_KINDS.map((kind) => ({ kind, weight: 1 }))).filter(
+    (choice) => choice.weight > 0,
+  );
+  /** Every field switched off would leave nothing to roll: fall back rather than throw. */
+  const pool = allowed.length > 0 ? allowed : [{ kind: 'remolino' as FieldKind, weight: 1 }];
+
+  const total = pool.reduce((sum, choice) => sum + choice.weight, 0);
+  const roll = random() * total;
+  let cumulative = 0;
+  let kind: FieldKind = pool[pool.length - 1]?.kind ?? 'remolino';
+  for (const choice of pool) {
+    cumulative += choice.weight;
+    if (roll < cumulative) {
+      kind = choice.kind;
+      break;
+    }
+  }
+
   const element =
     kind === 'volcan' ? (BASE_ELEMENTS[pickIndex(BASE_ELEMENTS.length, random)] ?? 'fire') : null;
   return { kind, element, bombs: [] };

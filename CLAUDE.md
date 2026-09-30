@@ -559,8 +559,39 @@ at the top, and everything below them is the normal battle.
   last point, and a double knockout resolves as a win for the same reason your damage lands
   first.
 - **Everything it does is ANNOUNCED** — the blast, the stir, the life it gave or took — because
-  a board that changes with no explanation reads as a glitch. `app/field-labels.ts` holds the
-  name and the one-line rule, printed above the board for the whole fight.
+  a board that changes with no explanation reads as a glitch.
+
+### Fields are EDITABLE — everything except the rule
+
+`battle_fields` is a row per field and `/admin/campos` edits it: the name it shows, the sentence
+that explains it, its icon, the **artwork behind the board**, whether it comes up and how often.
+
+What is deliberately NOT in that table is the rule. A whirlwind shuffles the board because
+`core/fields` says so, and nothing in any row can invent an eleventh field or turn one into
+another — the `kind` column is checked against `FIELD_KINDS`, so a row cannot even name a field
+that does not exist. That narrowness is what makes the screen safe to hand to whoever is tuning.
+
+- **`is_enabled` is the real lever.** A field that turns out to be unfun is switched off from
+  the panel instead of deleted from a source file, and `weight` answers the other complaint: one
+  that is merely strong just comes up less. Both without a deploy.
+- **The catalogue is read at the START of a battle and never again**, like the mana costs.
+  Turning a field off must not move the rules under a fight being played on it.
+- **Switching every field off falls back rather than throwing.** An empty catalogue is a panel
+  mistake, not a reason to refuse somebody a battle.
+- **The presentation is read PER RENDER**, not snapshotted into the battle row. The rules are
+  frozen when the fight starts because they must be; a name, a sentence and a background are not
+  rules, and an admin who fixes a typo should see it fixed.
+
+#### The rule FLOATS now, and the name lives on the board
+
+The field used to be a banner above the board: it cost height, and with the rule spelled out it
+cost three lines of a phone. Now the name sits in a chip in the board's top-left corner with an
+**(i)**, and tapping it floats the sentence OVER the board — absolutely positioned, so it pushes
+nothing, and `pointer-events: none` so it never eats a drag.
+
+**The background is deliberately faint** (`.board-art`, 30% under a dark veil). At full strength
+it ate the gems, and the gems are the game. The veil is an `::after`, which paints after the
+children, so the gems carry a `z-index` — without it the artwork buried them.
 
 ### Every board change earns a signal — `convert_tiles` did not have one
 

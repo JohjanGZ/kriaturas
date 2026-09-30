@@ -7,7 +7,9 @@ import { getBattleToShow, loadGameConfig } from '@/db/queries/battle';
 import { adjustmentFor, loadSeasonBalance } from '@/db/queries/season';
 import { creatures, evolutionPaths, species } from '@/db/schema';
 import { redirect } from 'next/navigation';
+import { getFieldSettings } from '@/db/queries/field';
 import { getCurrentPlayer, hasDevFallback } from '@/lib/auth';
+import { imageStorage } from '@/lib/storage';
 import { BattleBoard } from './board';
 import { TeamPicker, type PickableCreature } from './team-picker';
 
@@ -62,6 +64,23 @@ export default async function PlayPage() {
   /** The battle in progress, or a finished one whose result is still unread. */
   const active = await getBattleToShow(player.id);
 
+  /**
+   * How the field LOOKS is read HERE, per render, not copied into the battle
+   * row. The rules it enforces are snapshotted when the fight starts — those
+   * must not move underneath it — but a name, a sentence and a background are
+   * presentation, and an admin who fixes a typo should see it fixed.
+   */
+  const settings = active?.field ? await getFieldSettings(active.field.kind) : null;
+  const storage = imageStorage();
+  const fieldLook = settings
+    ? {
+        name: settings.name,
+        rule: settings.rule,
+        icon: settings.icon,
+        imageUrl: settings.imagePath ? storage.urlFor(settings.imagePath) : null,
+      }
+    : null;
+
   if (active) {
     const finished = active.status !== 'active';
     return (
@@ -77,6 +96,7 @@ export default async function PlayPage() {
           shield={active.shield}
           opponentShield={active.opponentShield}
           field={active.field}
+          fieldLook={fieldLook}
           fruits={active.fruits}
           rivalFruits={active.rivalFruits}
           fruitsToEvolve={active.fruitsToEvolve}

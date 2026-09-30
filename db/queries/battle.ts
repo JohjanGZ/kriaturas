@@ -77,6 +77,7 @@ import {
   players,
   species,
 } from "../schema";
+import { enabledFieldChoices } from "./field";
 import { adjustmentFor, loadSeasonBalance } from "./season";
 
 /**
@@ -423,7 +424,8 @@ export async function startBattle(
    * exists. From here on `combat` is the tuned config and nothing downstream
    * needs to know a field is involved.
    */
-  const field = mode === "campos" ? rollField(Math.random) : null;
+  const field =
+    mode === "campos" ? rollField(Math.random, await enabledFieldChoices()) : null;
   const combat = tuneCombat(config.combat, field);
   /**
    * The running season's adjustments. They are read HERE and copied into the

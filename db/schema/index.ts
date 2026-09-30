@@ -1,6 +1,7 @@
 export * from './enums';
 export * from './users';
 export * from './players';
+export * from './fields';
 export * from './species';
 export * from './evolution';
 export * from './objectives';

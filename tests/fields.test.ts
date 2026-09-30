@@ -255,3 +255,69 @@ describe('the fields that stir the board between turns', () => {
     expect(afterTurn(start, null, combat, kinds, fixedRandom(6)).board).toEqual(start);
   });
 });
+
+/**
+ * THE DRAW IS A ROW NOW. A field that turns out to be unfun is switched off
+ * from the panel, and one that is merely strong just comes up less — both
+ * without a deploy. These pin that the weighting is real and that turning
+ * everything off cannot break the game.
+ */
+describe('rollField with a catalogue behind it', () => {
+  const seeded = (seed: number) => {
+    let state = seed;
+    return () => {
+      state = (state * 1103515245 + 12345) % 2147483648;
+      return state / 2147483648;
+    };
+  };
+
+  it('never rolls a field that is not offered', () => {
+    const random = seeded(4);
+    const offered = [
+      { kind: 'duelo' as const, weight: 1 },
+      { kind: 'sequia' as const, weight: 1 },
+    ];
+    for (let i = 0; i < 200; i += 1) {
+      expect(['duelo', 'sequia']).toContain(rollField(random, offered).kind);
+    }
+  });
+
+  it('respects the weights: ten to one shows up as roughly ten to one', () => {
+    const random = seeded(11);
+    let duelo = 0;
+    let sequia = 0;
+    for (let i = 0; i < 2000; i += 1) {
+      const rolled = rollField(random, [
+        { kind: 'duelo', weight: 10 },
+        { kind: 'sequia', weight: 1 },
+      ]);
+      if (rolled.kind === 'duelo') duelo += 1;
+      if (rolled.kind === 'sequia') sequia += 1;
+    }
+    expect(duelo).toBeGreaterThan(sequia * 5);
+  });
+
+  it('a weight of zero is the same as not being offered', () => {
+    const random = seeded(7);
+    for (let i = 0; i < 100; i += 1) {
+      const rolled = rollField(random, [
+        { kind: 'duelo', weight: 0 },
+        { kind: 'vergel', weight: 3 },
+      ]);
+      expect(rolled.kind).toBe('vergel');
+    }
+  });
+
+  it('EVERY field switched off falls back instead of throwing', () => {
+    /** An empty catalogue is a panel mistake, not a reason to refuse a battle. */
+    const rolled = rollField(seeded(2), []);
+    expect(FIELD_KINDS).toContain(rolled.kind);
+  });
+
+  it('still rolls all ten when no catalogue is given', () => {
+    const random = seeded(3);
+    const seen = new Set<string>();
+    for (let i = 0; i < 400; i += 1) seen.add(rollField(random).kind);
+    expect(seen.size).toBeGreaterThan(6);
+  });
+});

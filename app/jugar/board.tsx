@@ -4,7 +4,6 @@ import { startTransition, useActionState, useEffect, useRef, useState } from 're
 import { flushSync, useFormStatus } from 'react-dom';
 import type { StoredBoard, StoredField, StoredRival } from '@/core/schemas/battle';
 import { CreatureArt, type ArtElement } from '../creature-art';
-import { FIELD_LABELS } from '../field-labels';
 import { Gem, type GemKind } from '../gem';
 import {
   type BattleActionState,
@@ -136,6 +135,7 @@ export function BattleBoard({
   shield,
   opponentShield,
   field,
+  fieldLook,
   fruits,
   rivalFruits,
   fruitsToEvolve,
@@ -160,6 +160,12 @@ export function BattleBoard({
   opponentShield: number;
   /** The field this battle is on, or null in the ordinary mode. */
   field: StoredField | null;
+  /**
+   * How the field LOOKS, edited in the panel and loaded by the page. The rule
+   * it enforces is still code; this is only its name, its sentence, its icon
+   * and the artwork behind the board.
+   */
+  fieldLook: { name: string; rule: string; icon: string; imageUrl: string | null } | null;
   /** The shared drakofruta bars, and what a transformation costs. */
   fruits: number;
   rivalFruits: number;
@@ -897,7 +903,7 @@ export function BattleBoard({
     return () => clearTimeout(timer);
   }, [detonated]);
 
-  const fieldLabel = field ? FIELD_LABELS[field.kind] : null;
+  const fieldLabel = fieldLook;
 
   return (
     <div className="battle">
@@ -1071,32 +1077,24 @@ export function BattleBoard({
        * board anyway. It starts open on turn one, because that is when it
        * matters.
        */}
-      {fieldLabel ? (
-        <button
-          type="button"
-          className={`field-tag${fieldOpen ? ' field-tag-open' : ''}`}
-          onClick={() => setFieldOpen((open) => !open)}
-          aria-expanded={fieldOpen}
-        >
-          <span className="field-icon" aria-hidden="true">
-            {fieldLabel.icon}
-          </span>
-          <strong>{fieldLabel.name}</strong>
-          <span className="field-more" aria-hidden="true">
-            {fieldOpen ? '▴' : '¿qué hace? ▾'}
-          </span>
-          {fieldOpen ? <span className="field-rule">{fieldLabel.rule}</span> : null}
-        </button>
-      ) : null}
-
       <div className="board-stage">
         <div
-          className={`board${rivalPlaying ? ' board-locked' : ''}`}
+          className={`board${rivalPlaying ? ' board-locked' : ''}${
+            fieldLook?.imageUrl ? ' board-art' : ''
+          }`}
           style={
             {
               '--cols': width,
               '--rows': height,
               aspectRatio: `${width} / ${height}`,
+              /**
+               * El fondo del campo. Va como variable y no como <img> para que
+               * el CSS decida cuánto se ve: a plena opacidad se comería las
+               * gemas, y las gemas son el juego.
+               */
+              ...(fieldLook?.imageUrl
+                ? { '--field-art': `url(${JSON.stringify(fieldLook.imageUrl)})` }
+                : {}),
             } as React.CSSProperties
           }
           aria-disabled={rivalPlaying}
@@ -1166,6 +1164,39 @@ export function BattleBoard({
               {bomb.fuse}
             </span>
           ))}
+
+          {/*
+            * EL CAMPO, EN UNA ESQUINA DEL TABLERO.
+            *
+            * Antes era un cartel encima del tablero: ocupaba alto, y la regla
+            * entera lo ocupaba tres veces. Ahora el nombre vive en una esquina
+            * y la regla sale FLOTANDO al tocar la (i) — encima del tablero,
+            * sin empujar nada, y se va sola al volver a tocar.
+            */}
+          {fieldLabel ? (
+            <button
+              type="button"
+              className="field-chip"
+              onClick={() => setFieldOpen((open) => !open)}
+              aria-expanded={fieldOpen}
+              aria-label={`Campo ${fieldLabel.name}. ¿Qué hace?`}
+            >
+              <span aria-hidden="true">{fieldLabel.icon}</span>
+              <span className="field-chip-name">{fieldLabel.name}</span>
+              <span className="field-chip-info" aria-hidden="true">
+                i
+              </span>
+            </button>
+          ) : null}
+
+          {fieldLabel && fieldOpen ? (
+            <p className="field-pop" role="status">
+              <strong>
+                {fieldLabel.icon} {fieldLabel.name}
+              </strong>
+              <span>{fieldLabel.rule}</span>
+            </p>
+          ) : null}
 
           {/*
             * LAS JUGADAS QUE TE QUEDAN, encima del tablero y no en la cabecera.

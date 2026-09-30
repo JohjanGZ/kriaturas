@@ -17,6 +17,7 @@ import {
   eggTypes,
   evolutionPaths,
   evolutionRequirements,
+  battleFields,
   gameConfigs,
   games,
   incubators,
@@ -755,6 +756,86 @@ async function seedIncubator(db: Db, playerId: string): Promise<void> {
   console.log('  incubadora básica (batería de 1 día)');
 }
 
+/**
+ * The ten fields' starting presentation. The RULE is code; this is the text.
+ */
+const FIELD_SEED: Record<string, { name: string; icon: string; rule: string }> = {
+  remolino: {
+    name: 'Remolino',
+    icon: '🌀',
+    rule: 'Al acabar cada turno todas las fichas cambian de sitio.',
+  },
+  minado: {
+    name: 'Campo minado',
+    icon: '💣',
+    rule: 'Las minas bajan un número por cada movimiento. Al llegar a 0 revientan lo que tienen alrededor, y eso no carga a nadie.',
+  },
+  volcan: {
+    name: 'Volcán',
+    icon: '🌋',
+    rule: 'Un elemento cae el triple de veces: esa kriatura dispara sin parar y la otra pasa hambre.',
+  },
+  sequia: {
+    name: 'Sequía',
+    icon: '🏜',
+    rule: 'No cae drakofruta: aquí nadie se transforma.',
+  },
+  vergel: {
+    name: 'Vergel',
+    icon: '🌳',
+    rule: 'Drakofruta por todas partes: gana la carrera quien se transforme primero.',
+  },
+  santuario: {
+    name: 'Santuario',
+    icon: '✨',
+    rule: 'Los dos recuperáis vida al final de cada turno. Partidas largas, muchos especiales.',
+  },
+  paramo: {
+    name: 'Páramo',
+    icon: '💀',
+    rule: 'Los dos perdéis vida cada turno: hay que rematar rápido.',
+  },
+  duelo: {
+    name: 'Duelo',
+    icon: '⚔',
+    rule: 'Un solo movimiento por turno, pero cada gema vale el doble de maná.',
+  },
+  resonancia: {
+    name: 'Resonancia',
+    icon: '🔊',
+    rule: 'Las alineaciones largas pagan mucho más: guardar un cinco es enorme.',
+  },
+  vendaval: {
+    name: 'Vendaval',
+    icon: '🌬',
+    rule: 'Al acabar el turno una columna al azar rota una posición.',
+  },
+};
+
+/**
+ * The ten fields, as rows the admin can edit.
+ *
+ * The RULE stays in code — a field is a sentence, not composed data — so what
+ * is seeded here is only its presentation: the name it shows, the line that
+ * explains it, its icon, and whether it comes up.
+ *
+ * `onConflictDoNothing` on purpose: this runs on every seed, and a name or a
+ * background someone edited in the panel must survive it. The seed plants a
+ * field; it does not keep overwriting one.
+ */
+async function seedFields(db: Db): Promise<void> {
+  let planted = 0;
+  for (const [kind, label] of Object.entries(FIELD_SEED)) {
+    const written = await db
+      .insert(battleFields)
+      .values({ kind, name: label.name, rule: label.rule, icon: label.icon })
+      .onConflictDoNothing({ target: battleFields.kind })
+      .returning({ id: battleFields.id });
+    planted += written.length;
+  }
+  console.log(`  campos: ${planted} nuevos, ${Object.keys(FIELD_SEED).length} en total`);
+}
+
 async function main(): Promise<void> {
   const { db, kind, close } = await createConnection();
   const now = new Date();
@@ -769,6 +850,7 @@ async function main(): Promise<void> {
     await seedEggs(db, speciesIds);
     await seedStarterCreature(db, playerId, speciesIds, now);
     await seedIncubator(db, playerId);
+    await seedFields(db);
     console.log('Seed complete.');
   } finally {
     await close();

@@ -567,6 +567,8 @@ th {
   /* Falls accelerate, then settle just past the mark — that reads as weight. */
   transition: transform var(--move-ms, 260ms) cubic-bezier(0.36, 0, 0.42, 1.12);
   will-change: transform;
+  /* Por encima del fondo del campo y de su velo. */
+  z-index: 1;
 }
 
 .gem-tile:active {
@@ -748,6 +750,700 @@ th {
 .hud-turn-foe {
   color: var(--danger);
   font-weight: 700;
+}
+
+/*
+ * EL RESUMEN DE LA JUGADA: flota, no empuja, y se va solo.
+ *
+ * Como bloque de la rejilla aparecia y desaparecia moviendo el tablero y las
+ * vidas debajo del dedo entre jugada y jugada. En absoluto no ocupa altura
+ * ninguna. Va abajo del tablero porque arriba estan las jugadas restantes y el
+ * cartel del campo, y porque el pulgar tapa menos esa esquina.
+ */
+.move-log {
+  position: absolute;
+  left: 50%;
+  bottom: 10px;
+  z-index: 6;
+  max-width: calc(100% - 24px);
+  margin: 0;
+  padding: 0.3rem 0.7rem;
+  border-radius: 999px;
+  font-size: 0.78rem;
+  font-weight: 600;
+  line-height: 1.25;
+  text-align: center;
+  color: #e9ffef;
+  background: rgb(10 16 12 / 0.86);
+  border: 1px solid color-mix(in srgb, var(--ok) 55%, transparent);
+  box-shadow: 0 4px 14px rgb(0 0 0 / 0.45);
+  /* Nunca se come un gesto: debajo hay gemas que se arrastran. */
+  pointer-events: none;
+  transform: translateX(-50%);
+  animation: move-log 3200ms ease forwards;
+}
+
+/* Una jugada rechazada hay que LEERLA, no es un recibo: aguanta mas. */
+.move-log-bad {
+  color: #ffe6e6;
+  background: rgb(22 8 10 / 0.9);
+  border-color: var(--danger);
+  animation-duration: 4500ms;
+}
+
+@keyframes move-log {
+  0% {
+    opacity: 0;
+    transform: translate(-50%, 8px);
+  }
+  8%,
+  72% {
+    opacity: 1;
+    transform: translate(-50%, 0);
+  }
+  100% {
+    opacity: 0;
+    transform: translate(-50%, -4px);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .move-log {
+    animation-duration: 2600ms;
+  }
+  .move-log-bad {
+    animation-duration: 3800ms;
+  }
+}
+
+/*
+ * How many moves are left, countable at a glance — ON the board.
+ *
+ * It used to sit in the middle of the HUD, between the two lives. On a phone
+ * that row wrapped and pushed the board off the screen, and the health bars
+ * ended up above the fold. Here it costs no height at all and sits where the
+ * eye already is.
+ */
+.board-moves {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  z-index: 5;
+  display: inline-flex;
+  gap: 5px;
+  padding: 4px 7px;
+  border-radius: 999px;
+  background: rgb(12 10 18 / 0.55);
+  pointer-events: none;
+}
+
+.pip {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: var(--border);
+  box-shadow: inset 0 1px 2px rgb(0 0 0 / 0.4);
+}
+
+.pip-on {
+  background: var(--accent);
+  box-shadow: 0 0 6px var(--accent);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .turn-banner {
+    animation-duration: 700ms;
+  }
+}
+
+/* ---- the blow itself ----
+ *
+ * A number going down is a fact; a bolt leaving the creature that fired it and
+ * striking a life bar is an EVENT. The shot is what connects "my bar filled" to
+ * "their health dropped" — without it the damage is just arithmetic happening
+ * somewhere off screen.
+ */
+
+.shot {
+  position: fixed;
+  z-index: 25;
+  width: 20px;
+  height: 20px;
+  margin: 0;
+  border-radius: 50%;
+  pointer-events: none;
+  animation: shot-travel 420ms cubic-bezier(0.45, 0, 0.7, 1) forwards;
+}
+
+/* Yours flies at the rival's bar; the rival's flies at yours. */
+.shot-mine {
+  background: radial-gradient(circle at 35% 35%, #fff, var(--ok) 60%, transparent 72%);
+  box-shadow: 0 0 14px var(--ok);
+}
+
+.shot-foe {
+  background: radial-gradient(circle at 35% 35%, #fff, var(--danger) 60%, transparent 72%);
+  box-shadow: 0 0 14px var(--danger);
+}
+
+@keyframes shot-travel {
+  0% {
+    opacity: 0;
+    transform: translate(-50%, -50%) scale(0.4);
+  }
+  18% {
+    opacity: 1;
+    transform: translate(-50%, -50%) scale(1.15);
+  }
+  100% {
+    opacity: 0.9;
+    transform: translate(calc(-50% + var(--dx)), calc(-50% + var(--dy))) scale(0.75);
+  }
+}
+
+/* The bar that just took the hit. */
+.bar-hit {
+  animation: bar-hit 420ms ease;
+}
+
+@keyframes bar-hit {
+  0%,
+  100% {
+    filter: none;
+    transform: none;
+  }
+  20% {
+    filter: brightness(2.1);
+    transform: translateX(-3px);
+  }
+  55% {
+    filter: brightness(1.5);
+    transform: translateX(3px);
+  }
+}
+
+/* The creature that is firing. */
+.fighter-firing .fighter-art {
+  animation: fighter-lunge 380ms ease;
+}
+
+@keyframes fighter-lunge {
+  0%,
+  100% {
+    transform: var(--fighter-rest, none);
+  }
+  35% {
+    filter: brightness(1.6) drop-shadow(0 0 12px #fff);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .shot {
+    animation-duration: 260ms;
+  }
+  .bar-hit,
+  .fighter-firing .fighter-art {
+    animation-duration: 220ms;
+  }
+}
+
+/*
+ * A bar that JUMPS reads as a number changing; a bar that slides reads as a
+ * blow landing. The health bars are paced by the replay, so the movement is
+ * what tells the player when they were hit.
+ */
+.bar-fill {
+  transition: width 380ms ease;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .bar-fill {
+    transition-duration: 160ms;
+  }
+}
+
+/* ---- the fruit both sides are fighting over ---- */
+
+.fruitbars {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  margin: 0.35rem 0 0.2rem;
+}
+
+.bar-fruit {
+  flex: 1;
+  height: 10px;
+}
+
+.fruit-count {
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: var(--muted);
+  min-width: 2.4rem;
+  text-align: center;
+}
+
+.fruit-mark {
+  font-size: 0.95rem;
+}
+
+.evo-choice {
+  display: grid;
+  gap: 0.5rem;
+  justify-items: center;
+  text-align: center;
+  border-color: var(--fruit);
+  box-shadow: 0 0 0 1px var(--fruit) inset;
+}
+
+.evo-choice-options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  justify-content: center;
+}
+
+/* ---- evolving ----
+ *
+ * Permanent, paid for with the rarest resource in the game, and possible once
+ * per creature: it cannot be a button that quietly increments a stat. The
+ * creature takes the screen, transforms, and comes back looking like something
+ * else — that moment IS the reward the fruit was saved for.
+ */
+
+/* The "you can evolve now" banner: a notice you can click. */
+.evo-callout {
+  display: block;
+  text-decoration: none;
+  font-weight: 700;
+}
+
+.evo-wallet {
+  display: flex;
+  align-items: center;
+  gap: 0.7rem;
+  flex-wrap: wrap;
+}
+
+.evo-wallet-ready {
+  border-color: var(--ok);
+  box-shadow: 0 0 0 1px var(--ok) inset;
+}
+
+.evo-fruits {
+  font-size: 1.3rem;
+  font-weight: 800;
+}
+
+.evo-veil {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+  display: grid;
+  place-items: center;
+  padding: 1rem;
+  background: rgb(5 3 12 / 0.88);
+  backdrop-filter: blur(4px);
+}
+
+.evo-stage {
+  position: relative;
+  display: grid;
+  justify-items: center;
+  gap: 0.9rem;
+  width: min(420px, 100%);
+  text-align: center;
+}
+
+.evo-art {
+  width: min(60vw, 220px);
+  height: auto;
+  /* Shaking and blazing white while the server decides. */
+  animation: evo-charge 900ms ease-in-out infinite;
+  filter: drop-shadow(0 0 18px #fff);
+}
+
+.evo-stage-done .evo-art {
+  animation: evo-reveal 900ms cubic-bezier(0.2, 1.3, 0.4, 1) both;
+}
+
+@keyframes evo-charge {
+  0%,
+  100% {
+    transform: translateX(0) scale(1);
+    filter: drop-shadow(0 0 14px #fff) brightness(1.15);
+  }
+  25% {
+    transform: translateX(-6px) scale(1.02);
+  }
+  50% {
+    transform: translateX(6px) scale(1.04);
+    filter: drop-shadow(0 0 30px #fff) brightness(2);
+  }
+  75% {
+    transform: translateX(-4px) scale(1.02);
+  }
+}
+
+@keyframes evo-reveal {
+  0% {
+    opacity: 0;
+    transform: scale(0.5) rotate(-8deg);
+    filter: brightness(4) drop-shadow(0 0 40px #fff);
+  }
+  60% {
+    opacity: 1;
+    transform: scale(1.12) rotate(2deg);
+  }
+  100% {
+    opacity: 1;
+    transform: none;
+    filter: drop-shadow(0 0 16px rgb(255 255 255 / 0.5));
+  }
+}
+
+/* Light spilling out from behind the creature. */
+.evo-rays {
+  position: absolute;
+  top: 40%;
+  left: 50%;
+  width: 320px;
+  height: 320px;
+  margin: -160px 0 0 -160px;
+  pointer-events: none;
+  background: conic-gradient(
+    from 0deg,
+    rgb(255 255 255 / 0.55) 0deg 8deg,
+    transparent 8deg 30deg
+  );
+  opacity: 0.35;
+  animation: evo-spin 6s linear infinite;
+}
+
+.evo-stage-done .evo-rays {
+  opacity: 0.75;
+}
+
+@keyframes evo-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* The flash at the moment of the change. */
+.evo-stage-done .evo-burst {
+  position: absolute;
+  top: 40%;
+  left: 50%;
+  width: 20px;
+  height: 20px;
+  margin: -10px 0 0 -10px;
+  border-radius: 50%;
+  pointer-events: none;
+  background: #fff;
+  animation: evo-burst 700ms ease-out both;
+}
+
+@keyframes evo-burst {
+  0% {
+    opacity: 0.95;
+    transform: scale(1);
+  }
+  100% {
+    opacity: 0;
+    transform: scale(26);
+  }
+}
+
+.evo-title {
+  margin: 0;
+  font-size: 1.15rem;
+  font-weight: 800;
+  color: #fff;
+  text-shadow: 0 2px 10px rgb(0 0 0 / 0.6);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .evo-art,
+  .evo-rays {
+    animation-duration: 1800ms;
+  }
+  .evo-stage-done .evo-art,
+  .evo-stage-done .evo-burst {
+    animation-duration: 420ms;
+  }
+}
+
+/* ---- the result, before the screen changes ----
+ *
+ * A finished battle stops being active at once, so without this the team picker
+ * would replace the board the instant the last gem cleared. The player has to be
+ * told how it ended, and has to be the one who closes it.
+ */
+
+.result-veil {
+  position: fixed;
+  inset: 0;
+  z-index: 30;
+  display: grid;
+  place-items: center;
+  padding: 1rem;
+  background: rgb(6 4 10 / 0.74);
+  backdrop-filter: blur(3px);
+  animation: result-in 240ms ease both;
+}
+
+.result-card {
+  width: min(420px, 100%);
+  display: grid;
+  gap: 0.7rem;
+  justify-items: center;
+  text-align: center;
+  box-shadow: 0 18px 50px rgb(0 0 0 / 0.6);
+}
+
+.result-title {
+  margin: 0;
+  font-size: 1.9rem;
+  font-weight: 900;
+  letter-spacing: 0.05em;
+}
+
+.result-won {
+  color: var(--ok);
+  text-shadow: 0 0 20px rgb(88 214 141 / 0.45);
+}
+
+.result-lost {
+  color: var(--danger);
+}
+
+.result-rewards {
+  margin: 0;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 0.4rem 0.9rem;
+  font-weight: 700;
+}
+
+@keyframes result-in {
+  from {
+    opacity: 0;
+    transform: scale(0.97);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .result-veil {
+    animation-duration: 120ms;
+  }
+}
+
+/* ---- bars ---- */
+
+.bar {
+  position: relative;
+  height: 16px;
+  border-radius: 999px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  overflow: hidden;
+}
+
+.bar-fill {
+  height: 100%;
+  transition: width 0.35s ease;
+}
+
+.bar-text {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  font-size: 0.7rem;
+  font-weight: 700;
+  color: var(--text);
+}
+
+.picker {
+  width: 100%;
+  font: inherit;
+  color: inherit;
+}
+
+.picker-on {
+  border-color: var(--accent);
+  box-shadow: inset 0 0 0 2px var(--accent);
+}
+
+.creature-thumb {
+  width: 100%;
+  height: 120px;
+}
+
+/* ---- phones ---- */
+
+@media (max-width: 560px) {
+  .shell {
+    padding: 0.9rem 0.7rem 3rem;
+  }
+  .card {
+    padding: 0.8rem;
+  }
+  .grid {
+    grid-template-columns: 1fr 1fr;
+    gap: 0.6rem;
+  }
+  h1 {
+    font-size: 1.25rem;
+  }
+}
+
+/* The season, said out loud where the numbers are read. */
+.season-tuned {
+  color: var(--fruit);
+  font-weight: 700;
+}
+
+.excellent-mark {
+  color: var(--fruit);
+  margin-left: 0.25rem;
+}
+
+.tag-excellent {
+  background: var(--fruit);
+  color: #24102a;
+}
+
+/*
+ * A creature with NO element. White, outlined rather than filled: it has to
+ * read as "still blank" and not as a tenth element.
+ */
+.tag-none {
+  background: transparent;
+  color: var(--ink);
+  border: 1px dashed var(--line);
+}
+
+.card-white {
+  opacity: 0.85;
+  border-style: dashed;
+}
+
+/* ---- campos: the field as an opponent ---- */
+
+/*
+ * EL CAMPO, EN UNA ESQUINA DEL TABLERO.
+ *
+ * Antes era un cartel encima: ocupaba alto, y con la regla entera ocupaba tres
+ * líneas de móvil. El nombre cabe en una chapa discreta, y la regla --que solo
+ * hace falta una vez-- sale flotando al tocar la (i), encima del tablero y sin
+ * empujar absolutamente nada.
+ */
+.field-chip {
+  position: absolute;
+  top: 10px;
+  left: 10px;
+  z-index: 5;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  margin: 0;
+  padding: 3px 8px;
+  border: 1px solid color-mix(in srgb, var(--mana) 45%, transparent);
+  border-radius: 999px;
+  background: rgb(12 10 18 / 0.62);
+  color: #eaf3ff;
+  font: inherit;
+  font-size: 0.72rem;
+  font-weight: 600;
+  line-height: 1.2;
+  cursor: pointer;
+}
+
+.field-chip-name {
+  max-width: 9rem;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+/* La (i) es el único aviso de que hay algo más que leer. */
+.field-chip-info {
+  display: grid;
+  place-items: center;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: var(--mana);
+  color: #06121a;
+  font-size: 0.62rem;
+  font-weight: 800;
+  font-style: italic;
+}
+
+.field-pop {
+  position: absolute;
+  top: 34px;
+  left: 10px;
+  right: 10px;
+  z-index: 7;
+  display: grid;
+  gap: 0.25rem;
+  margin: 0;
+  padding: 0.55rem 0.7rem;
+  border-radius: 10px;
+  border: 1px solid color-mix(in srgb, var(--mana) 50%, transparent);
+  background: rgb(10 12 20 / 0.94);
+  box-shadow: 0 8px 24px rgb(0 0 0 / 0.55);
+  font-size: 0.78rem;
+  line-height: 1.35;
+  color: var(--ink);
+  /* Flota por encima de las gemas y no se come el arrastre de ninguna. */
+  pointer-events: none;
+  animation: field-pop 160ms ease-out both;
+}
+
+@keyframes field-pop {
+  from {
+    opacity: 0;
+    transform: translateY(-6px);
+  }
+}
+
+/*
+ * EL FONDO DEL CAMPO. Muy bajado de opacidad y con una capa oscura encima: a
+ * plena vista se comería las gemas, y las gemas son el juego. Se nota que el
+ * terreno cambió sin competir con lo que hay que leer.
+ */
+.board-art::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: var(--radius);
+  background-image: var(--field-art);
+  background-size: cover;
+  background-position: center;
+  opacity: 0.3;
+  pointer-events: none;
+  z-index: 0;
+}
+
+.board-art::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: var(--radius);
+  background: linear-gradient(rgb(10 10 22 / 0.45), rgb(10 10 22 / 0.7));
+  pointer-events: none;
+  /* ::after pinta DESPUES de los hijos: sin esto el velo taparia las gemas. */
+  z-index: 0;
 }
 
 /*
