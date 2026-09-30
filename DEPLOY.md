@@ -98,6 +98,22 @@ queda solo con `public/`. Se reconoce así:
 `vercel.json` lo fija desde el repositorio, que es donde debe estar: así no depende de un ajuste
 del panel que nadie recuerda haber tocado, y un proyecto nuevo creado desde este repo nace bien.
 
+## La región importa más que ninguna otra cosa
+
+`vercel.json` fija `"regions": ["gru1"]` — São Paulo, **la misma región donde está la base de
+Neon** (`sa-east-1`). No es un detalle de afinado: es la diferencia entre una jugada instantánea
+y una de cuatro segundos.
+
+Una jugada hace del orden de **30 consultas secuenciales**: lee la batalla, el equipo, las vías,
+la configuración y la temporada; resuelve tu turno y el del bot; y escribe tablero, vidas,
+barras, estados y objetivos en una transacción. En local eso es invisible porque PGlite vive en
+el mismo proceso. Con la función en Virginia y la base en São Paulo, cada ida y vuelta cuesta
+unos 130 ms, y 30 × 130 ms son cuatro segundos de espera por movimiento.
+
+En la misma región, esos 130 ms pasan a ser unos pocos. **Si algún día mueves la base a otra
+región, mueve esto con ella** — las dos tienen que ir juntas o el juego se vuelve injugable sin
+que nada parezca roto.
+
 ## Cuidado con esto
 
 - **`ALLOW_ADMIN_ENTRY` le da el panel a quien pulse el botón.** No hay login: cualquiera con el
