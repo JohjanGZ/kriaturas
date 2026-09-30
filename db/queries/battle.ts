@@ -62,6 +62,7 @@ import {
   type CorralsConfig,
   type EggsConfig,
   type HealthConfig,
+  type ShopConfig,
   type PlayConfig,
   parseConfig,
 } from "@/core/schemas/config";
@@ -100,6 +101,7 @@ export type LoadedConfig = {
   eggs: EggsConfig;
   corrals: CorralsConfig;
   health: HealthConfig;
+  shop: ShopConfig;
   gameId: string;
 };
 
@@ -130,6 +132,7 @@ export async function loadGameConfig(
     eggs: parseConfig("eggs", value("eggs")),
     corrals: parseConfig("corrals", value("corrals")),
     health: parseConfig("health", value("health")),
+    shop: parseConfig("shop", value("shop")),
   };
 }
 

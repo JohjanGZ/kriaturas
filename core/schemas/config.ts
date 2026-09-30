@@ -6,7 +6,15 @@ import { z } from 'zod';
  * schema registered for its key before it is used.
  */
 
-export const CONFIG_KEYS = ['stamina', 'play', 'combat', 'eggs', 'corrals', 'health'] as const;
+export const CONFIG_KEYS = [
+  'stamina',
+  'play',
+  'combat',
+  'eggs',
+  'corrals',
+  'health',
+  'shop',
+] as const;
 export type ConfigKey = (typeof CONFIG_KEYS)[number];
 export const configKeySchema = z.enum(CONFIG_KEYS);
 
@@ -75,6 +83,19 @@ const healthConfigSchema = z.strictObject({
    * TIEMPO, igual que las baterías de las incubadoras.
    */
   curePriceCoins: z.number().int().min(1).max(100_000).default(150),
+});
+
+/**
+ * LA TIENDA. De momento una sola cosa, y a propósito: la piedra elemental.
+ *
+ * Crecerá con los ingredientes de las medicinas, que son el otro camino de
+ * pago. La regla que la gobierna ya está escrita en todo el proyecto: **las
+ * monedas compran tiempo, nunca perdón** — quien paga se salta el camino largo,
+ * y quien no, lo recorre.
+ */
+const shopConfigSchema = z.strictObject({
+  /** Lo que cuesta despertar a una kriatura blanca sin pasar por misiones. */
+  elementStonePriceCoins: z.number().int().min(1).max(100_000).default(300),
 });
 
 const corralsConfigSchema = z.strictObject({
@@ -237,6 +258,7 @@ export const CONFIG_SCHEMAS = {
   eggs: eggsConfigSchema,
   corrals: corralsConfigSchema,
   health: healthConfigSchema,
+  shop: shopConfigSchema,
 } as const;
 
 export type StaminaConfig = z.infer<typeof staminaConfigSchema>;
@@ -245,6 +267,7 @@ export type CombatConfig = z.infer<typeof combatConfigSchema>;
 export type EggsConfig = z.infer<typeof eggsConfigSchema>;
 export type CorralsConfig = z.infer<typeof corralsConfigSchema>;
 export type HealthConfig = z.infer<typeof healthConfigSchema>;
+export type ShopConfig = z.infer<typeof shopConfigSchema>;
 
 export type ConfigValue<K extends ConfigKey> = z.infer<(typeof CONFIG_SCHEMAS)[K]>;
 
@@ -290,6 +313,7 @@ export const DEFAULT_CONFIG: { [K in ConfigKey]: ConfigValue<K> } = {
     extraMovesPerTurn: 1,
   },
   health: { chanceAtEmptyPercent: 20, sickCeilingPercent: 25, curePriceCoins: 150 },
+  shop: { elementStonePriceCoins: 300 },
   corrals: {
     starterCapacity: 10,
     corralsForSale: [

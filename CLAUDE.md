@@ -115,10 +115,24 @@ are what the board deals and nothing else may pretend to be one.
   The species is still rolled at PURCHASE and hidden until `status = 'hatched'`, so what the
   player experiences is finding it when the egg opens, with nothing to re-roll.
 
-> **The stone itself does not exist yet.** The item, its price and how a player gets one are
-> still to be built. The write it will perform is already here (`awakenCreature`), and
-> `npx tsx scripts/dev-force-result.ts piedra albo water` uses the stone the game has not got, so
-> the awakened creature can be looked at meanwhile.
+### La piedra elemental
+
+`useElementStone` la compra y la usa en el mismo gesto, desde la ficha del corral: cuatro
+botones, uno por elemento. **El jugador ELIGE en qué se convierte** — sortearlo convertiría la
+gracia del Albo en una lotería.
+
+- **Se compra y se usa a la vez**, como la cura. No hace falta inventario todavía, y montar un
+  almacén para una sola cosa sería construir la estantería antes que los libros.
+- **Se escribe UNA vez**, con `WHERE element IS NULL` dentro de la transacción: dos piedras
+  usadas a la vez pasarían las dos una comprobación hecha en TypeScript, y la segunda no puede
+  cobrar por nada. Si no se escribió ninguna fila, no se cobra.
+- El precio vive en `shop.elementStonePriceCoins`. Cuando lleguen las misiones, la piedra será
+  también lo que dan gratis — el mismo trato que la medicina: **las monedas compran tiempo,
+  nunca perdón.**
+
+> Añadir una clave a `CONFIG_KEYS` **necesita una migración**: la columna `game_configs.key` es
+> un enum de Postgres, así que sin `db:generate` el seed revienta con `invalid input value for
+> enum`. El valor por defecto de Zod cubre la lectura, no la escritura.
 
 ## Objectives — unlock requirements
 

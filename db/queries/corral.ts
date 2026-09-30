@@ -1,5 +1,5 @@
 import { and, asc, eq, isNotNull, isNull } from 'drizzle-orm';
-import { resolveElement } from '@/core/elements';
+import { type BaseElement, resolveElement } from '@/core/elements';
 import { applyAdjustment, effectiveAdjustment } from '@/core/balance';
 import { staminaCeiling } from '@/core/health';
 import { deriveStamina } from '@/core/stamina';
@@ -34,6 +34,8 @@ export type PennedCreature = {
   sickSince: Date | null;
   /** Lo que cuesta curarla de golpe, sin pasar por las misiones. */
   curePrice: number;
+  /** Lo que cuesta la piedra que despierta a una blanca. */
+  stonePrice: number;
   /**
    * Los números con los que se compara una kriatura, YA AJUSTADOS por la
    * temporada. El corral sustituye al listado de "mis kriaturas", así que tiene
@@ -134,6 +136,7 @@ export async function getCorralShelf(playerId: string, now: Date): Promise<Corra
       rested: !sick && stamina.current >= config.play.minStaminaToPlay,
       sickSince: row.sickSince,
       curePrice: config.health.curePriceCoins,
+      stonePrice: config.shop.elementStonePriceCoins,
       imageUrl: null,
     };
   };
@@ -353,6 +356,88 @@ export async function cureCreature(
       .update(creatures)
       .set({ sickSince: null })
       .where(and(eq(creatures.id, creatureId), isNotNull(creatures.sickSince)));
+
+    return { ok: true as const, paid: price };
+  });
+}
+
+export type StoneFailure =
+  | 'not_yours'
+  | 'species_has_its_own_element'
+  | 'already_awakened'
+  | 'not_enough_coins';
+
+/**
+ * LA PIEDRA ELEMENTAL — lo que despierta a una kriatura blanca.
+ *
+ * Hasta ahora el Albo estaba EN el juego y no podía jugar: nacía blanco, la
+ * escritura que lo despierta existía desde el primer día, y no había forma de
+ * llegar a ella. Un callejón sin salida que el jugador veía en su corral.
+ *
+ * Se compra y se usa en el mismo gesto, como la cura: no hace falta inventario
+ * todavía, y meterlo antes de que haya ingredientes sería construir un almacén
+ * para una sola cosa. Cuando lleguen las misiones, la piedra será además lo que
+ * dan gratis — el mismo trato que la medicina.
+ *
+ * **El elemento lo elige el jugador.** No se sortea: la gracia del Albo es
+ * decidir en qué se convierte, y un sorteo convertiría la rareza en lotería.
+ *
+ * Se escribe UNA vez, con `WHERE element IS NULL` dentro de la transacción: dos
+ * piedras usadas a la vez pasarían las dos una comprobación hecha en
+ * TypeScript, y la segunda no puede cobrar por nada.
+ */
+export async function useElementStone(
+  creatureId: string,
+  playerId: string,
+  element: BaseElement,
+  now: Date,
+): Promise<{ ok: true; paid: number } | { ok: false; reason: StoneFailure }> {
+  const db = await getDb();
+  const config = await loadGameConfig();
+  const price = config.shop.elementStonePriceCoins;
+
+  return db.transaction(async (tx) => {
+    const [row] = await tx
+      .select({
+        id: creatures.id,
+        element: creatures.element,
+        speciesElement: species.baseElement,
+      })
+      .from(creatures)
+      .innerJoin(species, eq(species.id, creatures.speciesId))
+      .where(and(eq(creatures.id, creatureId), eq(creatures.playerId, playerId)))
+      .limit(1);
+    if (!row) return { ok: false as const, reason: 'not_yours' as const };
+
+    /** Una kriatura con elemento propio no tiene nada que decidir. */
+    if (row.speciesElement !== null) {
+      return { ok: false as const, reason: 'species_has_its_own_element' as const };
+    }
+    if (row.element !== null) {
+      return { ok: false as const, reason: 'already_awakened' as const };
+    }
+
+    const [player] = await tx.select().from(players).where(eq(players.id, playerId)).limit(1);
+    if (!player) return { ok: false as const, reason: 'not_yours' as const };
+    if (player.coins < price) {
+      return { ok: false as const, reason: 'not_enough_coins' as const };
+    }
+
+    await tx
+      .update(players)
+      .set({ coins: player.coins - price })
+      .where(eq(players.id, playerId));
+
+    const written = await tx
+      .update(creatures)
+      .set({ element, awakenedAt: now })
+      .where(and(eq(creatures.id, creatureId), isNull(creatures.element)))
+      .returning({ id: creatures.id });
+
+    /** La carrera la pierde la segunda: sin fila escrita, nada que cobrar. */
+    if (written.length === 0) {
+      return { ok: false as const, reason: 'already_awakened' as const };
+    }
 
     return { ok: true as const, paid: price };
   });

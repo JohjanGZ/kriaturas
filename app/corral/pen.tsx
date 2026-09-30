@@ -10,6 +10,7 @@ import {
   buyCorralAction,
   cureAction,
   feedInCorralAction,
+  useStoneAction,
 } from './actions';
 
 /**
@@ -117,6 +118,9 @@ export function Pen({ shelf }: { shelf: CorralShelf }) {
   } satisfies CorralActionState);
   const [buy, doBuy] = useActionState(buyCorralAction, { ok: false } satisfies CorralActionState);
   const [cure, doCure] = useActionState(cureAction, { ok: false } satisfies CorralActionState);
+  const [stone, doStone] = useActionState(useStoneAction, {
+    ok: false,
+  } satisfies CorralActionState);
 
   const everyone = [...shelf.corrals.flatMap((pen) => pen.creatures), ...shelf.loose];
   const chosen = everyone.find((creature) => creature.id === picked) ?? null;
@@ -136,6 +140,9 @@ export function Pen({ shelf }: { shelf: CorralShelf }) {
       ) : null}
       {cure.message ? (
         <p className={`notice ${cure.ok ? 'notice-ok' : 'notice-error'}`}>{cure.message}</p>
+      ) : null}
+      {stone.message ? (
+        <p className={`notice ${stone.ok ? 'notice-ok' : 'notice-error'}`}>{stone.message}</p>
       ) : null}
 
       {shelf.corrals.map((pen) => (
@@ -219,6 +226,32 @@ export function Pen({ shelf }: { shelf: CorralShelf }) {
               </div>
             </div>
           </div>
+
+          {/*
+            * LA PIEDRA: cuatro botones, uno por elemento. Elegir es la gracia
+            * del Albo — sortearlo lo convertiría en una lotería — y hasta que
+            * uno se pulsa, esta kriatura no puede pelear con nadie.
+            */}
+          {chosen.element === null ? (
+            <>
+              <p className="small muted">
+                Nació en blanco. Una <strong>piedra elemental</strong> decide qué es, y hasta
+                entonces no puede pelear. La elección es permanente.
+              </p>
+              <div className="row" style={{ gap: '0.4rem', flexWrap: 'wrap' }}>
+                {(['fire', 'water', 'plant', 'psychic'] as const).map((element) => (
+                  <form key={element} action={doStone}>
+                    <input type="hidden" name="creatureId" value={chosen.id} />
+                    <input type="hidden" name="element" value={element} />
+                    <Pending
+                      primary={shelf.coins >= chosen.stonePrice}
+                      label={`${element} · ${chosen.stonePrice}`}
+                    />
+                  </form>
+                ))}
+              </div>
+            </>
+          ) : null}
 
           {chosen.sickSince ? (
             <p className="small muted">

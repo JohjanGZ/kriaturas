@@ -3,7 +3,8 @@
 import { revalidatePath } from 'next/cache';
 import { z } from 'zod';
 import { feedCreatureSchema } from '@/core/schemas/creature';
-import { buyCorral, cureCreature, moveCreature } from '@/db/queries/corral';
+import { BASE_ELEMENTS } from '@/core/elements';
+import { buyCorral, cureCreature, moveCreature, useElementStone } from '@/db/queries/corral';
 import { feedCreature } from '@/db/queries/creature';
 import { getCurrentPlayer } from '@/lib/auth';
 
@@ -24,6 +25,8 @@ const REASONS: Record<string, string> = {
   already_full: 'Ya está descansada del todo',
   creature_not_found: 'Esa kriatura no existe',
   not_sick: 'Esa kriatura no está enferma',
+  species_has_its_own_element: 'Esa kriatura ya tiene elemento propio',
+  already_awakened: 'Esa kriatura ya despertó',
 };
 
 const describe = (reason: string): string => REASONS[reason] ?? 'No se pudo completar';
@@ -122,5 +125,43 @@ export async function cureAction(
 
   return result.ok
     ? { ok: true, message: `Curada. Pagaste ${result.paid} monedas.` }
+    : { ok: false, message: describe(result.reason) };
+}
+
+/**
+ * La piedra elemental. El jugador elige EN QUÉ se convierte — sortearlo
+ * convertiría la gracia del Albo en una lotería — y el precio, como siempre,
+ * lo pone el servidor.
+ */
+export async function useStoneAction(
+  _prev: CorralActionState,
+  form: FormData,
+): Promise<CorralActionState> {
+  const player = await getCurrentPlayer();
+  if (!player) return { ok: false, message: 'No hay jugador' };
+
+  const parsed = z
+    .strictObject({ creatureId: z.uuid(), element: z.enum(BASE_ELEMENTS) })
+    .safeParse({
+      creatureId: String(form.get('creatureId') ?? ''),
+      element: String(form.get('element') ?? ''),
+    });
+  if (!parsed.success) return { ok: false, message: 'Elemento no válido' };
+
+  const result = await useElementStone(
+    parsed.data.creatureId,
+    player.id,
+    parsed.data.element,
+    new Date(),
+  );
+
+  revalidatePath('/corral');
+  revalidatePath('/jugar');
+
+  return result.ok
+    ? {
+        ok: true,
+        message: `¡Despertó como ${parsed.data.element}! Pagaste ${result.paid} monedas.`,
+      }
     : { ok: false, message: describe(result.reason) };
 }
