@@ -242,6 +242,14 @@ export function BattleBoard({
    * flash over the board the server already settled, not as another frame.
    */
   const [blast, setBlast] = useState<readonly number[]>([]);
+  /**
+   * Cells a power just repainted. Like the blast, it is drawn OVER the settled
+   * board rather than replayed: the change already happened on the server, and
+   * what was missing was any sign that it did.
+   */
+  const [painted, setPainted] = useState<readonly number[]>([]);
+  /** The field's rule, folded away until asked for. Open on the first turn. */
+  const [fieldOpen, setFieldOpen] = useState(turn === 0);
   /** The move summary, shown floating over the board and then let go. */
   const [flash, setFlash] = useState<{ id: number; text: string; ok: boolean } | null>(null);
   const flashId = useRef(0);
@@ -506,6 +514,37 @@ export function BattleBoard({
       }
 
       if (cancelled) return;
+
+      /**
+       * EL CAMPO MUEVE EL TABLERO, Y SE ANUNCIA ANTES DE QUE PASE.
+       *
+       * El remolino baraja todo al acabar el turno y el vendaval rota una
+       * columna; un tablero muerto se rehace entero. Nada de eso viaja en la
+       * animacion --ocurre en el servidor despues de la ultima jugada-- asi que
+       * el tablero simplemente aparecia distinto. Un tablero que cambia sin
+       * explicacion se lee como un fallo del juego, no como el terreno
+       * haciendo lo suyo.
+       *
+       * Va aqui, entre el rival y tu turno, porque es justo cuando ocurre; y
+       * antes de soltar el guard, para que el cartel se vea mientras el tablero
+       * todavia es el viejo.
+       */
+      const stirredBy = state.boardShuffled
+        ? '🌀 Un poder revuelve el tablero'
+        : state.stirred
+          ? state.stirred === 'shuffled'
+            ? '🌀 El campo baraja el tablero'
+            : '🌬 El vendaval mueve una columna'
+          : state.reshuffled
+            ? '♻ Sin jugadas posibles: tablero nuevo'
+            : null;
+
+      if (stirredBy) {
+        setBanner({ text: stirredBy, tone: 'foe' });
+        await sleep(BANNER_MS);
+        if (cancelled) return;
+        setBanner(null);
+      }
 
       /** Handing the board back is announced too, so the lock lifting is legible. */
       if (rivalMoves.length > 0) {
@@ -834,6 +873,22 @@ export function BattleBoard({
     return () => clearTimeout(timer);
   }, [state]);
 
+  /**
+   * A power repainted the board: mark those cells for a moment.
+   *
+   * The server has always sent this and the browser always ignored it, so a
+   * creature with `convert_tiles` changed four gems with nothing on screen to
+   * say why — which reads as the game shuffling pieces behind the player's
+   * back, and was reported as exactly that.
+   */
+  const converted = state.ok ? state.convertedCells : undefined;
+  useEffect(() => {
+    if (!converted || converted.length === 0) return;
+    setPainted(converted);
+    const timer = setTimeout(() => setPainted([]), 1200);
+    return () => clearTimeout(timer);
+  }, [converted]);
+
   const detonated = state.ok ? state.detonated : undefined;
   useEffect(() => {
     if (!detonated || detonated.length === 0) return;
@@ -1006,18 +1061,32 @@ export function BattleBoard({
       {abandonState.message ? <p className="notice">{abandonState.message}</p> : null}
 
       {/*
-       * WHAT GROUND ARE WE ON. It is printed before the first move and it stays
-       * there: a rule the player has to remember is a rule they will forget,
-       * and "why did the board just shuffle" must never be a question.
+       * WHAT GROUND ARE WE ON — and the rule FOLDS instead of being clipped.
+       *
+       * Spelled out in full it took three lines of a phone and pushed the board
+       * off the screen; clipped with an ellipsis there was no way to learn what
+       * the field does, which is the one thing worth knowing before the first
+       * move. So the name is always there and the rule opens on a tap: the
+       * height is the player's decision, taken when they are not looking at the
+       * board anyway. It starts open on turn one, because that is when it
+       * matters.
        */}
       {fieldLabel ? (
-        <p className="field-tag" title={fieldLabel.rule}>
+        <button
+          type="button"
+          className={`field-tag${fieldOpen ? ' field-tag-open' : ''}`}
+          onClick={() => setFieldOpen((open) => !open)}
+          aria-expanded={fieldOpen}
+        >
           <span className="field-icon" aria-hidden="true">
             {fieldLabel.icon}
           </span>
           <strong>{fieldLabel.name}</strong>
-          <span className="field-rule">{fieldLabel.rule}</span>
-        </p>
+          <span className="field-more" aria-hidden="true">
+            {fieldOpen ? '▴' : '¿qué hace? ▾'}
+          </span>
+          {fieldOpen ? <span className="field-rule">{fieldLabel.rule}</span> : null}
+        </button>
       ) : null}
 
       <div className="board-stage">
@@ -1139,6 +1208,19 @@ export function BattleBoard({
               {flash.text}
             </p>
           ) : null}
+
+          {painted.map((cell) => (
+            <span
+              key={`painted-${cell}`}
+              className="painted"
+              style={
+                {
+                  '--col': cell % width,
+                  '--row': Math.floor(cell / width),
+                } as React.CSSProperties
+              }
+            />
+          ))}
 
           {blast.map((cell) => (
             <span

@@ -356,8 +356,10 @@ what you look at after playing. So everything above the board earns its height o
   row anybody acts on.
 - **"Juega el rival" is said once**, by the lock pill on the board. The HUD used to say it too.
 - **No `<h1>` during a battle.** A board with two lineups over it does not need a caption.
-- **The field's rule is one line, clipped** (`.field-rule`), with the full text in `title`. It
-  matters on the first move and is noise afterwards; wrapped, it took three lines of a phone.
+- **The field's rule FOLDS** rather than being clipped. Spelled out it took three lines of a
+  phone; clipped with an ellipsis there was no way to learn what the field does, which is the one
+  thing worth knowing before the first move. The name is always there, the rule opens on a tap,
+  and it starts open on turn one.
 - Under `max-height: 760px` the gaps, the arena padding and the drag hint shrink or go.
 - **The move summary FLOATS** (`.move-log`), over the bottom of the board. As a block in the
   grid it appeared and vanished with every move, shifting the board and the life bars under the
@@ -518,6 +520,26 @@ at the top, and everything below them is the normal battle.
 - **Everything it does is ANNOUNCED** — the blast, the stir, the life it gave or took — because
   a board that changes with no explanation reads as a glitch. `app/field-labels.ts` holds the
   name and the one-line rule, printed above the board for the whole fight.
+
+### Every board change earns a signal — `convert_tiles` did not have one
+
+The server has always computed `convertedCells` and the browser has always thrown them away, so
+a creature with `convert_tiles` (Pirox repaints four) changed four gems with **nothing on screen
+to say why**. It was reported as "sometimes the tiles change for no reason", and that is exactly
+what it was: it had nothing to do with the fields, which is why it happened with no field at all.
+
+The rule this breaks is already written above: a board that changes with no explanation reads as
+the game moving pieces behind the player's back. So every way the board can change now has one:
+
+| what changed it | signal |
+| --- | --- |
+| a cascade | the replay (the gems fall) |
+| `convert_tiles` | `.painted` — those cells flash, plus a line in the summary |
+| `shuffle_board`, a field stir, a dead board | a banner over the board, before the lock lifts |
+| a mine | `.blast` on the cells it took |
+
+The flashes are drawn OVER the settled board rather than replayed as frames, because the change
+already happened on the server — what was missing was never the pixels, it was the signal.
 
 > The opening board is now dealt from the WEIGHTED bag like every refill after it. It used to be
 > dealt flat, which made the first board a different game from the rest of the battle —

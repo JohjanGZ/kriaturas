@@ -791,6 +791,8 @@ export type PlayMoveResult =
         /** Board cells a power repainted, and into what. */
         convertedCells: number[];
         convertedTo: string | null;
+        /** `shuffle_board` fired: the grid the player was reading is gone. */
+        boardShuffled: boolean;
         /** Health the poison took off each side this turn. */
         poisonTaken: number;
         poisonDealt: number;
@@ -1356,6 +1358,7 @@ export async function playMove(
       fieldHealed: fieldHealth.playerDelta,
       convertedCells,
       convertedTo: outcome.powers.convertElement,
+      boardShuffled: outcome.powers.shuffleBoard,
       poisonTaken: played.log.poisonTaken,
       poisonDealt: rivalPoisonDealt,
       gemsByElement: outcome.gemsByElement,

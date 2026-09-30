@@ -65,6 +65,18 @@ export type BattleActionState = {
   detonated?: number[];
   stirred?: 'shuffled' | 'gale' | null;
   fieldHealed?: number;
+  /** The board was dead and had to be rebuilt: the player is owed that too. */
+  reshuffled?: boolean;
+  /**
+   * Cells a power repainted, and the whole grid being rerolled.
+   *
+   * The server has always computed these and the browser has always thrown
+   * them away — which is why tiles changed kind with no explanation whenever a
+   * creature with `convert_tiles` fired.
+   */
+  convertedCells?: number[];
+  convertedTo?: string | null;
+  boardShuffled?: boolean;
   rival?: {
     from: { row: number; col: number };
     to: { row: number; col: number };
@@ -187,6 +199,10 @@ export async function playMoveAction(
   if (log.canEvolve) parts.push('✦ ¡puedes transformar una kriatura!');
   if (log.reshuffled) parts.push('sin jugadas posibles: tablero barajado');
   if (log.detonated.length > 0) parts.push(`💣 una mina se llevó ${log.detonated.length} fichas`);
+  if (log.convertedCells.length > 0) {
+    parts.push(`🎨 ${log.convertedCells.length} fichas ahora son de ${log.convertedTo ?? 'tu elemento'}`);
+  }
+  if (log.boardShuffled) parts.push('🌀 tablero revuelto por un poder');
   if (log.stirred === 'shuffled') parts.push('🌀 el remolino barajó el tablero');
   if (log.stirred === 'gale') parts.push('🌬 el vendaval movió una columna');
   if (log.fieldHealed > 0) parts.push(`+${log.fieldHealed} vida del campo`);
@@ -207,6 +223,10 @@ export async function playMoveAction(
     detonated: log.detonated,
     stirred: log.stirred,
     fieldHealed: log.fieldHealed,
+    reshuffled: log.reshuffled,
+    convertedCells: log.convertedCells,
+    convertedTo: log.convertedTo,
+    boardShuffled: log.boardShuffled,
     rival: result.rivalMoves.map((rivalMove) => ({
       from: rivalMove.from,
       to: rivalMove.to,

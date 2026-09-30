@@ -1341,15 +1341,18 @@ th {
   align-items: baseline;
   gap: 0.45rem;
   /*
-   * UNA SOLA LINEA. Envuelto, el texto de la regla se comia tres lineas en un
-   * movil y empujaba el tablero fuera de la pantalla. La regla importa en el
-   * primer movimiento y despues es ruido, asi que se recorta con puntos
-   * suspensivos y queda entera en el `title` y en pantallas anchas.
+   * PLEGADO POR DEFECTO. Entera, la regla ocupaba tres lineas de movil y
+   * empujaba el tablero fuera de la pantalla; recortada no se podia saber que
+   * hace el campo. Asi que se abre al tocarla: la altura la decide el jugador,
+   * y solo cuando ya no esta mirando el tablero.
    */
-  flex-wrap: nowrap;
-  overflow: hidden;
+  flex-wrap: wrap;
+  width: 100%;
   margin: 0 0 0.4rem;
   padding: 0.35rem 0.6rem;
+  text-align: left;
+  cursor: pointer;
+  font: inherit;
   border: 1px solid var(--line);
   border-left: 3px solid var(--mana);
   border-radius: 8px;
@@ -1357,13 +1360,50 @@ th {
 }
 
 .field-rule {
-  flex: 1 1 auto;
-  min-width: 0;
-  overflow: hidden;
-  white-space: nowrap;
-  text-overflow: ellipsis;
+  flex: 1 0 100%;
+  margin-top: 0.3rem;
   font-size: 0.8rem;
+  line-height: 1.35;
   color: var(--muted);
+}
+
+.field-more {
+  margin-left: auto;
+  font-size: 0.72rem;
+  color: var(--muted);
+}
+
+/*
+ * Cuatro fichas acaban de cambiar de elemento por un poder. El servidor
+ * siempre lo dijo y el navegador siempre lo tiro: sin esto, el tablero se
+ * reescribe solo y parece que el juego mueve piezas a escondidas.
+ */
+.painted {
+  position: absolute;
+  top: 5px;
+  left: 5px;
+  width: calc((100% - 10px) / var(--cols));
+  height: calc((100% - 10px) / var(--rows));
+  transform: translate(calc(var(--col) * 100%), calc(var(--row) * 100%));
+  pointer-events: none;
+  z-index: 4;
+  border-radius: 10px;
+  box-shadow: inset 0 0 0 2px #fff6c9, 0 0 14px rgb(255 240 180 / 0.8);
+  animation: painted 1200ms ease-out forwards;
+}
+
+@keyframes painted {
+  0% {
+    opacity: 0;
+    transform: translate(calc(var(--col) * 100%), calc(var(--row) * 100%)) scale(1.25);
+  }
+  25% {
+    opacity: 1;
+    transform: translate(calc(var(--col) * 100%), calc(var(--row) * 100%)) scale(1);
+  }
+  100% {
+    opacity: 0;
+  }
 }
 
 .field-icon {
