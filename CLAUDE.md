@@ -359,6 +359,12 @@ what you look at after playing. So everything above the board earns its height o
 - **The field's rule is one line, clipped** (`.field-rule`), with the full text in `title`. It
   matters on the first move and is noise afterwards; wrapped, it took three lines of a phone.
 - Under `max-height: 760px` the gaps, the arena padding and the drag hint shrink or go.
+- **The move summary FLOATS** (`.move-log`), over the bottom of the board. As a block in the
+  grid it appeared and vanished with every move, shifting the board and the life bars under the
+  player's thumb — on a phone that reads as the screen moving while you play. Absolutely
+  positioned it costs no height, never eats a gesture, and fades on its own: it is a receipt for
+  something the animation already showed. A refusal is kept longer and in red, because that one
+  has to be READ rather than confirmed.
 
 #### The bars are paced by the REPLAY, not by the server
 

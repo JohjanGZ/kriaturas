@@ -242,6 +242,9 @@ export function BattleBoard({
    * flash over the board the server already settled, not as another frame.
    */
   const [blast, setBlast] = useState<readonly number[]>([]);
+  /** The move summary, shown floating over the board and then let go. */
+  const [flash, setFlash] = useState<{ id: number; text: string; ok: boolean } | null>(null);
+  const flashId = useRef(0);
   const [selected, setSelected] = useState<Cell | null>(null);
   const [drag, setDrag] = useState<{ ids: [number, number]; dx: number; dy: number } | null>(null);
   const dragStart = useRef<{ cell: Cell; x: number; y: number; size: number } | null>(null);
@@ -816,6 +819,21 @@ export function BattleBoard({
    * already the settled one, so the flash explains a change that has happened
    * rather than pretending to cause it.
    */
+  /**
+   * A new result: flash its summary and drop it a few seconds later.
+   *
+   * Refusals stay longer — "esas casillas no se tocan" is something the player
+   * has to read, while "12 de daño" is a receipt for something they just
+   * watched happen.
+   */
+  useEffect(() => {
+    if (!state.message) return;
+    flashId.current += 1;
+    setFlash({ id: flashId.current, text: state.message, ok: state.ok });
+    const timer = setTimeout(() => setFlash(null), state.ok ? 3200 : 4500);
+    return () => clearTimeout(timer);
+  }, [state]);
+
   const detonated = state.ok ? state.detonated : undefined;
   useEffect(() => {
     if (!detonated || detonated.length === 0) return;
@@ -985,9 +1003,6 @@ export function BattleBoard({
         </div>
       ) : null}
 
-      {state.message ? (
-        <p className={`notice ${state.ok ? 'notice-ok' : 'notice-error'}`}>{state.message}</p>
-      ) : null}
       {abandonState.message ? <p className="notice">{abandonState.message}</p> : null}
 
       {/*
@@ -1102,6 +1117,28 @@ export function BattleBoard({
               ))}
             </span>
           )}
+
+          {/*
+            * EL RESUMEN DE LA JUGADA, flotando y sin ocupar sitio.
+            *
+            * Era un bloque dentro de la rejilla, asi que aparecia y desaparecia
+            * empujando el tablero y las vidas — en un movil eso es la pantalla
+            * moviendose debajo del dedo entre jugada y jugada. Aqui esta
+            * posicionado en absoluto: no empuja nada, no se puede tocar, y se
+            * desvanece solo porque ya lo dijo la animacion.
+            *
+            * La `key` cambia con cada resultado para que la animacion vuelva a
+            * empezar aunque el texto sea identico al anterior.
+            */}
+          {flash ? (
+            <p
+              key={flash.id}
+              className={`move-log${flash.ok ? '' : ' move-log-bad'}`}
+              role="status"
+            >
+              {flash.text}
+            </p>
+          ) : null}
 
           {blast.map((cell) => (
             <span

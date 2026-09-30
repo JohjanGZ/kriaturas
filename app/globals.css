@@ -751,6 +751,70 @@ th {
 }
 
 /*
+ * EL RESUMEN DE LA JUGADA: flota, no empuja, y se va solo.
+ *
+ * Como bloque de la rejilla aparecia y desaparecia moviendo el tablero y las
+ * vidas debajo del dedo entre jugada y jugada. En absoluto no ocupa altura
+ * ninguna. Va abajo del tablero porque arriba estan las jugadas restantes y el
+ * cartel del campo, y porque el pulgar tapa menos esa esquina.
+ */
+.move-log {
+  position: absolute;
+  left: 50%;
+  bottom: 10px;
+  z-index: 6;
+  max-width: calc(100% - 24px);
+  margin: 0;
+  padding: 0.3rem 0.7rem;
+  border-radius: 999px;
+  font-size: 0.78rem;
+  font-weight: 600;
+  line-height: 1.25;
+  text-align: center;
+  color: #e9ffef;
+  background: rgb(10 16 12 / 0.86);
+  border: 1px solid color-mix(in srgb, var(--ok) 55%, transparent);
+  box-shadow: 0 4px 14px rgb(0 0 0 / 0.45);
+  /* Nunca se come un gesto: debajo hay gemas que se arrastran. */
+  pointer-events: none;
+  transform: translateX(-50%);
+  animation: move-log 3200ms ease forwards;
+}
+
+/* Una jugada rechazada hay que LEERLA, no es un recibo: aguanta mas. */
+.move-log-bad {
+  color: #ffe6e6;
+  background: rgb(22 8 10 / 0.9);
+  border-color: var(--danger);
+  animation-duration: 4500ms;
+}
+
+@keyframes move-log {
+  0% {
+    opacity: 0;
+    transform: translate(-50%, 8px);
+  }
+  8%,
+  72% {
+    opacity: 1;
+    transform: translate(-50%, 0);
+  }
+  100% {
+    opacity: 0;
+    transform: translate(-50%, -4px);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .move-log {
+    animation-duration: 2600ms;
+  }
+  .move-log-bad {
+    animation-duration: 3800ms;
+  }
+}
+
+/*
  * How many moves are left, countable at a glance — ON the board.
  *
  * It used to sit in the middle of the HUD, between the two lives. On a phone
