@@ -53,8 +53,29 @@ export const playConfigSchema = z.strictObject({
 export const eggsConfigSchema = z.strictObject({
   dayBoundaryUtcOffsetMinutes: z.number().int().min(0).max(1439),
   maxActiveEggsPerPlayer: z.number().int().min(1).max(100),
-  /** Percentage of the price refunded when an egg spoils. */
+  /** Kept, unused: eggs no longer spoil. Being away never costs anything. */
   spoiledRefundPercent: z.number().int().min(0).max(100),
+  /**
+   * THE BATTERIES ON SALE. Capacity is how many days of electricity the
+   * incubator can hold at once, which is the only thing that separates the free
+   * one from the rest.
+   *
+   * Config and not a table because it is four numbers that want retuning
+   * together, like the combat rows — and because a price list nobody can edit
+   * without a migration is a price list that never gets edited.
+   */
+  incubatorsForSale: z
+    .array(
+      z.strictObject({
+        capacityDays: z.number().int().min(1).max(30),
+        priceCoins: z.number().int().min(1).max(100_000),
+      }),
+    )
+    .max(8)
+    .default([
+      { capacityDays: 3, priceCoins: 400 },
+      { capacityDays: 7, priceCoins: 1200 },
+    ]),
 });
 
 export const combatConfigSchema = z.strictObject({
@@ -220,5 +241,13 @@ export const DEFAULT_CONFIG: { [K in ConfigKey]: ConfigValue<K> } = {
     extraMoveMinRun: 4,
     extraMovesPerTurn: 1,
   },
-  eggs: { dayBoundaryUtcOffsetMinutes: 0, maxActiveEggsPerPlayer: 5, spoiledRefundPercent: 0 },
+  eggs: {
+    dayBoundaryUtcOffsetMinutes: 0,
+    maxActiveEggsPerPlayer: 5,
+    spoiledRefundPercent: 0,
+    incubatorsForSale: [
+      { capacityDays: 3, priceCoins: 400 },
+      { capacityDays: 7, priceCoins: 1200 },
+    ],
+  },
 };

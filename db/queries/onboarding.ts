@@ -2,7 +2,7 @@ import { asc, eq } from 'drizzle-orm';
 import { DEFAULT_CONFIG } from '@/core/schemas/config';
 import { initialAnchor } from '@/core/stamina';
 import { getDb } from '../client';
-import { creatures, players, species, users } from '../schema';
+import { creatures, incubators, players, species, users } from '../schema';
 
 /**
  * A NEW PLAYER FROM NOTHING — what a hosted deploy needs and a seeded laptop
@@ -92,6 +92,17 @@ export async function createGuestPlayer(now: Date): Promise<GuestSession> {
         })),
       );
     }
+
+    /**
+     * The free incubator, given rather than bought: a player with none could
+     * buy an egg and have nowhere to put it.
+     */
+    await tx.insert(incubators).values({
+      playerId: player.id,
+      name: 'Incubadora básica',
+      capacityDays: 1,
+      paidAmount: 0,
+    });
 
     if (white) {
       await tx.insert(creatures).values({

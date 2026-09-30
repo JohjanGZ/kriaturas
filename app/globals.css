@@ -1490,3 +1490,65 @@ th {
     animation-duration: 350ms;
   }
 }
+
+/* ---- la incubadora ---- */
+
+.egg-card {
+  display: grid;
+  gap: 0.4rem;
+  align-content: start;
+  text-align: left;
+}
+
+.egg-shell {
+  font-size: 2.1rem;
+  line-height: 1;
+}
+
+.egg-open {
+  animation: egg-open 600ms ease both;
+}
+
+@keyframes egg-open {
+  0% {
+    transform: scale(0.7) rotate(-8deg);
+  }
+  60% {
+    transform: scale(1.12) rotate(4deg);
+  }
+  100% {
+    transform: scale(1) rotate(0);
+  }
+}
+
+/*
+ * Los días con energía, uno a uno. Un "2/3" se lee como una fracción; tres
+ * casillas se leen como lo que falta. Las pagadas que aún no han llegado van a
+ * medias: ya son tuyas, pero todavía no han pasado.
+ */
+.egg-days {
+  display: inline-flex;
+  gap: 5px;
+}
+
+.egg-day {
+  width: 22px;
+  height: 10px;
+  border-radius: 3px;
+  background: var(--border);
+  box-shadow: inset 0 1px 2px rgb(0 0 0 / 0.35);
+}
+
+.egg-day-on {
+  background: var(--ok);
+  box-shadow: 0 0 6px color-mix(in srgb, var(--ok) 70%, transparent);
+}
+
+.egg-day-paid {
+  background: repeating-linear-gradient(
+    135deg,
+    color-mix(in srgb, var(--ok) 55%, transparent) 0 4px,
+    transparent 4px 8px
+  );
+  border: 1px solid color-mix(in srgb, var(--ok) 45%, transparent);
+}

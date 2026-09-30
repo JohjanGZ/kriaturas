@@ -37,97 +37,120 @@ export function daysBetween(fromCareDate: string, toCareDate: string): number {
   return Math.round((to - from) / MS_PER_DAY);
 }
 
-export type EggSnapshot = {
-  status: EggStatus;
-  careDaysCompleted: number;
-  currentStreak: number;
-  /** The care-day key of the last successful care, or null if never cared for. */
-  lastCareDate: string | null;
-};
-
 export type EggTypeSnapshot = {
   careDaysRequired: number;
-  maxMissedDays: number;
+  /** Coins the incubator burns per day while this egg is in it. */
+  electricityCost: number;
 };
 
-export type EggCareOutcome =
-  | {
-      ok: true;
-      careDate: string;
-      missedDays: number;
-      /** Broken by a gap longer than one day, so the streak restarts at 1. */
-      currentStreak: number;
-      careDaysCompleted: number;
-      readyToHatch: boolean;
-    }
+/** One care-day forward from a care-date key. */
+export function shiftCareDate(careDate: string, days: number): string {
+  const at = Date.parse(`${careDate}T00:00:00.000Z`) + days * MS_PER_DAY;
+  return new Date(at).toISOString().slice(0, 10);
+}
+
+/**
+ * LA INCUBADORA SE PAGA, NO SE VISITA.
+ *
+ * An egg advances because its incubator had power that day, and power is bought
+ * with coins — the electricity bill. Paying inserts ONE ROW PER DAY into
+ * `egg_care_log`, including days that have not arrived yet, and the unique
+ * index on (egg, date) is what stops a day being paid twice.
+ *
+ * Two consequences fall out of that, and both are the point:
+ *
+ * - **Being away costs nothing.** A day paid in advance arrives whether anybody
+ *   opened the game or not, so the egg keeps moving. Nothing here reads a
+ *   streak, and no egg spoils: the stamina model already refuses to punish
+ *   absence, and an egg bought with coins earned by playing should not be the
+ *   one place that does.
+ * - **The battery is the product.** How far ahead you may pay is the
+ *   incubator's capacity: one day for the free one — so a three-day egg wants
+ *   three visits — and three or seven for the ones you buy. What is sold is
+ *   AUTONOMY, never forgiveness.
+ */
+
+/** Care-days the egg has actually lived: paid days that have already arrived. */
+export function poweredDays(paidDates: readonly string[], today: string): number {
+  return paidDates.filter((date) => daysBetween(date, today) >= 0).length;
+}
+
+export type PayableParams = {
+  /** Every day already paid for this egg, arrived or not. */
+  paidDates: readonly string[];
+  today: string;
+  /** How many days ahead this incubator can hold. The free one holds 1. */
+  capacityDays: number;
+  careDaysRequired: number;
+};
+
+/**
+ * The days that can still be bought, in order, soonest first.
+ *
+ * Never a day in the past — that one is gone and paying for it would be
+ * back-filling. Never beyond the battery. Never more than the egg still needs,
+ * so nobody can prepay a fourth day of a three-day egg.
+ */
+export function payableDates(params: PayableParams): string[] {
+  const paid = new Set(params.paidDates);
+  const remaining = params.careDaysRequired - paid.size;
+  if (remaining <= 0) return [];
+
+  const dates: string[] = [];
+  for (let ahead = 0; ahead < params.capacityDays && dates.length < remaining; ahead += 1) {
+    const date = shiftCareDate(params.today, ahead);
+    if (!paid.has(date)) dates.push(date);
+  }
+  return dates;
+}
+
+export type PowerPlan =
+  | { ok: true; dates: string[]; cost: number }
   | {
       ok: false;
-      reason: 'already_cared_today' | 'already_hatched' | 'spoiled' | 'not_incubating';
-      careDate: string;
-      missedDays: number;
-      /** True when this call is what discovers the egg has spoiled. */
-      shouldMarkSpoiled: boolean;
+      reason: 'already_done' | 'battery_full' | 'not_enough_coins';
+      /** What it would have cost, so the UI can say how short the player is. */
+      cost: number;
     };
 
 /**
- * Decides what caring for an egg right now means. Pure: the caller writes the
- * care-log row and updates the egg inside one transaction.
+ * What paying for `wantedDays` right now would mean. Pure: the caller spends
+ * the coins and writes the rows in one transaction.
+ *
+ * `battery_full` is not an error state — it means every day this incubator can
+ * hold is already paid, and the player simply has to wait for them to arrive.
  */
-export function evaluateEggCare(
-  egg: EggSnapshot,
-  eggType: EggTypeSnapshot,
-  now: Date,
-  config: EggsConfig,
-): EggCareOutcome {
-  const careDate = careDateFor(now, config);
-
-  if (egg.status === 'hatched') {
-    return { ok: false, reason: 'already_hatched', careDate, missedDays: 0, shouldMarkSpoiled: false };
+export function planPower(
+  params: PayableParams & { wantedDays: number; coins: number; costPerDay: number },
+): PowerPlan {
+  const payable = payableDates(params);
+  if (params.careDaysRequired - params.paidDates.length <= 0) {
+    return { ok: false, reason: 'already_done', cost: 0 };
   }
-  if (egg.status === 'spoiled') {
-    return { ok: false, reason: 'spoiled', careDate, missedDays: 0, shouldMarkSpoiled: false };
-  }
+  if (payable.length === 0) return { ok: false, reason: 'battery_full', cost: 0 };
 
-  if (egg.lastCareDate === careDate) {
-    return {
-      ok: false,
-      reason: 'already_cared_today',
-      careDate,
-      missedDays: 0,
-      shouldMarkSpoiled: false,
-    };
-  }
+  const dates = payable.slice(0, Math.max(1, Math.min(params.wantedDays, payable.length)));
+  const cost = dates.length * params.costPerDay;
+  if (cost > params.coins) return { ok: false, reason: 'not_enough_coins', cost };
 
-  /**
-   * Days skipped since the last care. Caring on consecutive days gives a gap of
-   * 1, so missed = gap - 1. A brand-new egg has missed nothing.
-   */
-  const missedDays =
-    egg.lastCareDate === null ? 0 : Math.max(0, daysBetween(egg.lastCareDate, careDate) - 1);
-
-  if (missedDays > eggType.maxMissedDays) {
-    return { ok: false, reason: 'spoiled', careDate, missedDays, shouldMarkSpoiled: true };
-  }
-
-  const careDaysCompleted = egg.careDaysCompleted + 1;
-  return {
-    ok: true,
-    careDate,
-    missedDays,
-    currentStreak: missedDays === 0 ? egg.currentStreak + 1 : 1,
-    careDaysCompleted,
-    readyToHatch: careDaysCompleted >= eggType.careDaysRequired,
-  };
+  return { ok: true, dates, cost };
 }
 
 export type HatchVerdict =
   | { ok: true }
-  | { ok: false; reason: 'already_hatched' | 'spoiled' | 'not_enough_care_days'; missing: number };
+  | { ok: false; reason: 'already_hatched' | 'not_enough_care_days'; missing: number };
 
-export function evaluateHatch(egg: EggSnapshot, eggType: EggTypeSnapshot): HatchVerdict {
-  if (egg.status === 'hatched') return { ok: false, reason: 'already_hatched', missing: 0 };
-  if (egg.status === 'spoiled') return { ok: false, reason: 'spoiled', missing: 0 };
-  const missing = eggType.careDaysRequired - egg.careDaysCompleted;
+/**
+ * Ready when enough PAID days have arrived. It takes the count rather than
+ * reading a column, because the count is derived from the care log and a stored
+ * number is one more thing that can disagree with it.
+ */
+export function evaluateHatch(
+  params: { status: EggStatus; poweredDays: number },
+  eggType: EggTypeSnapshot,
+): HatchVerdict {
+  if (params.status === 'hatched') return { ok: false, reason: 'already_hatched', missing: 0 };
+  const missing = eggType.careDaysRequired - params.poweredDays;
   if (missing > 0) return { ok: false, reason: 'not_enough_care_days', missing };
   return { ok: true };
 }

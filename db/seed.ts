@@ -19,6 +19,7 @@ import {
   evolutionRequirements,
   gameConfigs,
   games,
+  incubators,
   objectives,
   players,
   seasons,
@@ -602,14 +603,26 @@ async function seedEggs(db: Db, speciesIds: Map<string, string>): Promise<void> 
     .values({
       slug: 'huevo-comun',
       name: 'Huevo común',
-      description: 'Sale una kriatura al azar. Atiéndelo tres días para que eclosione.',
+      description:
+        'Sale una kriatura al azar. Tres días con la incubadora encendida y se abre.',
       priceAmount: 100,
       priceResource: 'coins',
       careDaysRequired: 3,
+      electricityCost: 25,
       maxMissedDays: 1,
       isPublished: true,
     })
-    .onConflictDoUpdate({ target: eggTypes.slug, set: { isPublished: true } })
+    .onConflictDoUpdate({
+      target: eggTypes.slug,
+      set: {
+        isPublished: true,
+        priceAmount: 100,
+        careDaysRequired: 3,
+        electricityCost: 25,
+        description:
+          'Sale una kriatura al azar. Tres días con la incubadora encendida y se abre.',
+      },
+    })
     .returning();
   if (!eggType) throw new Error('Could not seed the egg type');
 
@@ -628,7 +641,46 @@ async function seedEggs(db: Db, speciesIds: Map<string, string>): Promise<void> 
       .onConflictDoNothing({ target: [eggTypeSpecies.eggTypeId, eggTypeSpecies.speciesId] });
   }
 
-  console.log(`  1 egg type with a weighted pool of ${speciesIds.size} species`);
+  /**
+   * EL PRIMER HUEVO, más barato y más rápido.
+   *
+   * La primera eclosión tiene que llegar mientras la persona todavía tiene
+   * curiosidad, no tres días después de haberlo dejado. Es el momento que
+   * decide si esto tiene progresión o solo combates sueltos.
+   */
+  const [starter] = await db
+    .insert(eggTypes)
+    .values({
+      slug: 'huevo-bienvenida',
+      name: 'Huevo de bienvenida',
+      description: 'El primero sale barato: un solo día de luz y ya tienes kriatura nueva.',
+      priceAmount: 50,
+      priceResource: 'coins',
+      careDaysRequired: 1,
+      electricityCost: 15,
+      maxMissedDays: 1,
+      isPublished: true,
+    })
+    .onConflictDoUpdate({
+      target: eggTypes.slug,
+      set: {
+        isPublished: true,
+        priceAmount: 50,
+        careDaysRequired: 1,
+        electricityCost: 15,
+      },
+    })
+    .returning();
+  if (!starter) throw new Error('Could not seed the starter egg type');
+
+  for (const [slug, speciesId] of speciesIds) {
+    await db
+      .insert(eggTypeSpecies)
+      .values({ eggTypeId: starter.id, speciesId, weight: weights[slug] ?? 4 })
+      .onConflictDoNothing({ target: [eggTypeSpecies.eggTypeId, eggTypeSpecies.speciesId] });
+  }
+
+  console.log(`  2 egg types with a weighted pool of ${speciesIds.size} species`);
 }
 
 /**
@@ -684,6 +736,25 @@ async function seedStarterCreature(
   console.log(`  starter creatures: ${added} nuevas, ${existing.length + added} en total`);
 }
 
+/**
+ * The free incubator: one day of battery, given and not bought.
+ *
+ * A player with no incubator could buy an egg and have nowhere to put it, so
+ * everybody starts with one — and it holds a single day, which is exactly the
+ * friction the bought ones remove.
+ */
+async function seedIncubator(db: Db, playerId: string): Promise<void> {
+  const existing = await db.select().from(incubators).where(eq(incubators.playerId, playerId));
+  if (existing.length > 0) {
+    console.log(`  incubadoras: ya tiene ${existing.length}`);
+    return;
+  }
+  await db
+    .insert(incubators)
+    .values({ playerId, name: 'Incubadora básica', capacityDays: 1, paidAmount: 0 });
+  console.log('  incubadora básica (batería de 1 día)');
+}
+
 async function main(): Promise<void> {
   const { db, kind, close } = await createConnection();
   const now = new Date();
@@ -697,6 +768,7 @@ async function main(): Promise<void> {
     await seedObjectives(db);
     await seedEggs(db, speciesIds);
     await seedStarterCreature(db, playerId, speciesIds, now);
+    await seedIncubator(db, playerId);
     console.log('Seed complete.');
   } finally {
     await close();

@@ -57,6 +57,7 @@ import {
 } from "@/core/schemas/battle";
 import {
   type CombatConfig,
+  type EggsConfig,
   type PlayConfig,
   parseConfig,
 } from "@/core/schemas/config";
@@ -91,6 +92,7 @@ export type LoadedConfig = {
   combat: CombatConfig;
   play: PlayConfig;
   stamina: StaminaConfig;
+  eggs: EggsConfig;
   gameId: string;
 };
 
@@ -118,6 +120,7 @@ export async function loadGameConfig(
     combat: parseConfig("combat", value("combat")),
     play: parseConfig("play", value("play")),
     stamina: parseConfig("stamina", value("stamina")),
+    eggs: parseConfig("eggs", value("eggs")),
   };
 }
 

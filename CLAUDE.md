@@ -135,20 +135,61 @@ still exists and is simply unused.
 completed care day. The client never reports progress and no input schema accepts one.
 `completed_at` is written once, so later edits to a target cannot un-complete what was earned.
 
-## Eggs — buy, care daily, hatch
+## Eggs — bought, POWERED, hatched
 
-An egg is bought from an `egg_types` row (price = amount + resource) and yields a **random
-species** from that type's weighted pool.
+An egg is bought from an `egg_types` row and yields a **random species** from that type's
+weighted pool. `/huevos` is the incubator screen.
 
 **The species is rolled server-side at purchase and stored immediately.** There is nothing to
 re-roll and nothing the client can influence; it is simply not exposed by any query until
-`status = 'hatched'`.
+`status = 'hatched'`. The egg being opaque is the whole drama of an egg.
 
-Care is **one row per (egg, care day)** in `egg_care_log`, with a unique index — so care cannot
-be spammed, replayed, or back-filled. `care_date` comes from the server clock plus
-`eggs.dayBoundaryUtcOffsetMinutes`, **never from a client timestamp**. Miss more than
-`egg_types.max_missed_days` and the egg spoils; reach `care_days_required` and it can hatch into
-a creature.
+### The incubator is PAID FOR, not visited
+
+An egg advances because its incubator had power that day, and power is bought with coins — the
+electricity bill. That is the difference between this and a daily-attendance check, and it is
+the whole design:
+
+- **Paying writes ONE ROW PER DAY** into `egg_care_log`, future days included. The unique index
+  on (egg, date) is what stops a day being paid twice, replayed or back-filled — the same guard
+  the old daily-care model used, now guarding a purchase.
+- **Progress is DERIVED**: paid days that have arrived (`poweredDays`). A stored counter is one
+  more thing that can disagree with the log, so the log is the truth and the column is a mirror
+  for the admin.
+- **Being away costs nothing.** A day paid in advance arrives whether anybody opened the game or
+  not. **Eggs no longer spoil at all** — `max_missed_days` and `spoiledRefundPercent` stay as
+  unused columns. The stamina model already refuses to punish absence, and an egg bought with
+  coins earned by playing must not be the one place that does.
+- **The BATTERY is the product.** `incubators.capacity_days` is how far ahead power can be
+  bought: the free one everybody is given holds **one day**, so a three-day egg wants three
+  visits; the ones on sale hold three or seven and charge in a single payment. What is sold is
+  **autonomy, never forgiveness** — an unpowered egg just sits still, so there is no punishment
+  to buy protection from.
+- **Prices are never sent by the client.** The egg price comes from its row, the electricity
+  from `egg_types.electricity_cost`, the incubators from `eggs.incubatorsForSale` in config. The
+  browser sends an id and a number of days.
+
+### Why three days, and why the numbers interlock
+
+`careDaysRequired` is 3 and the free battery is 1, and those two are chosen together:
+
+| incubator | battery | recharges per egg |
+| --------- | ------- | ----------------- |
+| free      | 1 day   | **3** |
+| bought    | 3 days  | **1** |
+
+At two days the bought one barely saves anything; at six the free one becomes a punishment.
+Three is the number that makes the upgrade worth buying without making the free one feel broken.
+
+With a win paying 50 coins, an egg at 100 and electricity at 25/day, **a new creature costs
+about 175 coins — three or four victories**. The real sink is running several at once:
+`maxActiveEggsPerPlayer` is 5, so five eggs burn 125 coins a day just to keep the lights on.
+That is the decision the system asks, and it asks a different one of a casual player than of an
+intense one without changing a rule.
+
+**The welcome egg** (`huevo-bienvenida`, 50 coins, one day) exists because the first hatch has to
+arrive while the player is still curious. It is the moment that decides whether this has
+progression or is only a series of battles.
 
 ## Match-3 engine
 

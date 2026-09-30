@@ -34,6 +34,7 @@ export default function RootLayout({ children }: { children: ReactNode }) {
           <nav>
             <Link href="/jugar">Jugar</Link>
             <Link href="/kriaturas">Mis kriaturas</Link>
+            <Link href="/huevos">Incubadora</Link>
             <Link href="/admin/species">Panel admin</Link>
             <Link href="/admin/temporadas">Temporadas</Link>
           </nav>

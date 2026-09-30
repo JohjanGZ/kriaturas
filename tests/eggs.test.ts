@@ -1,12 +1,13 @@
 import { describe, expect, it } from 'vitest';
 import {
-  type EggSnapshot,
-  type EggTypeSnapshot,
   careDateFor,
   daysBetween,
-  evaluateEggCare,
   evaluateHatch,
+  payableDates,
+  planPower,
+  poweredDays,
   rollSpeciesFromPool,
+  shiftCareDate,
 } from '@/core/eggs';
 import type { EggsConfig } from '@/core/schemas/config';
 
@@ -14,17 +15,8 @@ const config: EggsConfig = {
   dayBoundaryUtcOffsetMinutes: 0,
   maxActiveEggsPerPlayer: 5,
   spoiledRefundPercent: 0,
+  incubatorsForSale: [{ capacityDays: 3, priceCoins: 400 }],
 };
-
-const eggType: EggTypeSnapshot = { careDaysRequired: 3, maxMissedDays: 1 };
-
-const egg = (over: Partial<EggSnapshot> = {}): EggSnapshot => ({
-  status: 'incubating',
-  careDaysCompleted: 0,
-  currentStreak: 0,
-  lastCareDate: null,
-  ...over,
-});
 
 describe('careDateFor', () => {
   it('uses the UTC calendar day', () => {
@@ -46,116 +38,150 @@ describe('careDateFor', () => {
   });
 });
 
-describe('evaluateEggCare', () => {
-  it('accepts the first care of a fresh egg', () => {
-    const outcome = evaluateEggCare(egg(), eggType, new Date('2026-06-15T10:00:00Z'), config);
-    expect(outcome).toEqual({
-      ok: true,
-      careDate: '2026-06-15',
-      missedDays: 0,
-      currentStreak: 1,
-      careDaysCompleted: 1,
-      readyToHatch: false,
+/**
+ * LA INCUBADORA SE PAGA, NO SE VISITA.
+ *
+ * Paying inserts one row per day, future days included, and the unique index on
+ * (egg, date) is what stops a day being paid twice. These tests pin the two
+ * promises that model makes: being away costs nothing, and the battery is the
+ * only thing that limits how far ahead you can buy.
+ */
+describe('poweredDays', () => {
+  it('counts only the days that have arrived', () => {
+    /** Paid for three, two of them already past: the egg has lived two. */
+    expect(poweredDays(['2026-03-01', '2026-03-02', '2026-03-03'], '2026-03-02')).toBe(2);
+  });
+
+  it('counts a day the moment it arrives, not the day after', () => {
+    expect(poweredDays(['2026-03-05'], '2026-03-05')).toBe(1);
+  });
+
+  it('ADVANCES WHILE NOBODY LOOKS: days paid in advance arrive on their own', () => {
+    const paid = ['2026-03-01', '2026-03-02', '2026-03-03'];
+    /** Paid on the first and not opened again until the fourth. */
+    expect(poweredDays(paid, '2026-03-04')).toBe(3);
+  });
+
+  it('is zero for an egg nobody has powered', () => {
+    expect(poweredDays([], '2026-03-01')).toBe(0);
+  });
+});
+
+describe('payableDates', () => {
+  const base = { today: '2026-03-10', careDaysRequired: 3 };
+
+  it('offers only TODAY with the free one-day battery', () => {
+    expect(payableDates({ ...base, paidDates: [], capacityDays: 1 })).toEqual(['2026-03-10']);
+  });
+
+  it('offers the whole egg at once with a three-day battery', () => {
+    expect(payableDates({ ...base, paidDates: [], capacityDays: 3 })).toEqual([
+      '2026-03-10',
+      '2026-03-11',
+      '2026-03-12',
+    ]);
+  });
+
+  it('never offers a day already paid', () => {
+    expect(
+      payableDates({ ...base, paidDates: ['2026-03-10'], capacityDays: 3 }),
+    ).toEqual(['2026-03-11', '2026-03-12']);
+  });
+
+  it('never offers more days than the egg still needs', () => {
+    /** A seven-day battery on a three-day egg still stops at three. */
+    expect(payableDates({ ...base, paidDates: [], capacityDays: 7 })).toHaveLength(3);
+  });
+
+  it('never offers a day in the past: that one is gone', () => {
+    const dates = payableDates({ ...base, paidDates: [], capacityDays: 3 });
+    expect(dates.every((date) => date >= base.today)).toBe(true);
+  });
+
+  it('offers nothing once every day is paid for', () => {
+    expect(
+      payableDates({
+        ...base,
+        paidDates: ['2026-03-10', '2026-03-11', '2026-03-12'],
+        capacityDays: 3,
+      }),
+    ).toEqual([]);
+  });
+});
+
+describe('planPower', () => {
+  const base = {
+    today: '2026-03-10',
+    careDaysRequired: 3,
+    paidDates: [] as string[],
+    capacityDays: 3,
+    costPerDay: 25,
+    coins: 500,
+  };
+
+  it('charges per day, so three days cost three times one', () => {
+    const one = planPower({ ...base, wantedDays: 1 });
+    const three = planPower({ ...base, wantedDays: 3 });
+    expect(one.ok && one.cost).toBe(25);
+    expect(three.ok && three.cost).toBe(75);
+    expect(three.ok && three.dates).toHaveLength(3);
+  });
+
+  it('never sells more than the battery holds', () => {
+    const plan = planPower({ ...base, capacityDays: 1, wantedDays: 3 });
+    expect(plan.ok && plan.dates).toEqual(['2026-03-10']);
+    expect(plan.ok && plan.cost).toBe(25);
+  });
+
+  it('refuses when the coins are short, and says what it would have cost', () => {
+    const plan = planPower({ ...base, wantedDays: 3, coins: 40 });
+    expect(plan.ok).toBe(false);
+    expect(!plan.ok && plan.reason).toBe('not_enough_coins');
+    expect(plan.cost).toBe(75);
+  });
+
+  it('says the battery is full rather than charging for nothing', () => {
+    const plan = planPower({
+      ...base,
+      paidDates: ['2026-03-10', '2026-03-11'],
+      capacityDays: 2,
+      wantedDays: 1,
     });
+    expect(!plan.ok && plan.reason).toBe('battery_full');
+    expect(plan.cost).toBe(0);
   });
 
-  it('refuses a second care on the same day', () => {
-    const outcome = evaluateEggCare(
-      egg({ lastCareDate: '2026-06-15', careDaysCompleted: 1, currentStreak: 1 }),
-      eggType,
-      new Date('2026-06-15T23:00:00Z'),
-      config,
-    );
-    expect(outcome.ok).toBe(false);
-    if (outcome.ok) return;
-    expect(outcome.reason).toBe('already_cared_today');
+  it('says the egg is done when every day it needs is paid', () => {
+    const plan = planPower({
+      ...base,
+      paidDates: ['2026-03-10', '2026-03-11', '2026-03-12'],
+      wantedDays: 1,
+    });
+    expect(!plan.ok && plan.reason).toBe('already_done');
   });
 
-  it('extends the streak on consecutive days', () => {
-    const outcome = evaluateEggCare(
-      egg({ lastCareDate: '2026-06-15', careDaysCompleted: 1, currentStreak: 1 }),
-      eggType,
-      new Date('2026-06-16T08:00:00Z'),
-      config,
-    );
-    expect(outcome.ok).toBe(true);
-    if (!outcome.ok) return;
-    expect(outcome.missedDays).toBe(0);
-    expect(outcome.currentStreak).toBe(2);
-  });
-
-  it('tolerates a missed day but restarts the streak', () => {
-    const outcome = evaluateEggCare(
-      egg({ lastCareDate: '2026-06-15', careDaysCompleted: 2, currentStreak: 2 }),
-      eggType,
-      new Date('2026-06-17T08:00:00Z'),
-      config,
-    );
-    expect(outcome.ok).toBe(true);
-    if (!outcome.ok) return;
-    expect(outcome.missedDays).toBe(1);
-    expect(outcome.currentStreak).toBe(1);
-    expect(outcome.careDaysCompleted).toBe(3);
-    expect(outcome.readyToHatch).toBe(true);
-  });
-
-  it('spoils the egg once the tolerance is exceeded', () => {
-    const outcome = evaluateEggCare(
-      egg({ lastCareDate: '2026-06-15', careDaysCompleted: 2, currentStreak: 2 }),
-      eggType,
-      new Date('2026-06-18T08:00:00Z'),
-      config,
-    );
-    expect(outcome.ok).toBe(false);
-    if (outcome.ok) return;
-    expect(outcome.reason).toBe('spoiled');
-    expect(outcome.missedDays).toBe(2);
-    expect(outcome.shouldMarkSpoiled).toBe(true);
-  });
-
-  it('does not re-spoil an egg already marked spoiled', () => {
-    const outcome = evaluateEggCare(
-      egg({ status: 'spoiled' }),
-      eggType,
-      new Date('2026-06-18T08:00:00Z'),
-      config,
-    );
-    expect(outcome.ok).toBe(false);
-    if (outcome.ok) return;
-    expect(outcome.shouldMarkSpoiled).toBe(false);
-  });
-
-  it('refuses care on a hatched egg', () => {
-    const outcome = evaluateEggCare(
-      egg({ status: 'hatched' }),
-      eggType,
-      new Date('2026-06-18T08:00:00Z'),
-      config,
-    );
-    expect(outcome.ok).toBe(false);
-    if (outcome.ok) return;
-    expect(outcome.reason).toBe('already_hatched');
+  it('always sells at least one day when one is available', () => {
+    const plan = planPower({ ...base, wantedDays: 0 });
+    expect(plan.ok && plan.dates).toHaveLength(1);
   });
 });
 
 describe('evaluateHatch', () => {
-  it('refuses before enough care days and says how many are missing', () => {
-    expect(evaluateHatch(egg({ careDaysCompleted: 1 }), eggType)).toEqual({
-      ok: false,
-      reason: 'not_enough_care_days',
-      missing: 2,
-    });
-  });
+  const eggType = { careDaysRequired: 3, electricityCost: 25 };
 
-  it('allows hatching at exactly the required care days', () => {
-    expect(evaluateHatch(egg({ careDaysCompleted: 3 }), eggType)).toEqual({ ok: true });
-  });
-
-  it('refuses a spoiled egg', () => {
-    const verdict = evaluateHatch(egg({ status: 'spoiled', careDaysCompleted: 9 }), eggType);
+  it('refuses before enough powered days and says how many are missing', () => {
+    const verdict = evaluateHatch({ status: 'incubating', poweredDays: 1 }, eggType);
     expect(verdict.ok).toBe(false);
-    if (verdict.ok) return;
-    expect(verdict.reason).toBe('spoiled');
+    expect(!verdict.ok && verdict.missing).toBe(2);
+  });
+
+  it('allows hatching at exactly the required days', () => {
+    expect(evaluateHatch({ status: 'incubating', poweredDays: 3 }, eggType).ok).toBe(true);
+  });
+
+  it('refuses an egg that already hatched', () => {
+    const verdict = evaluateHatch({ status: 'hatched', poweredDays: 9 }, eggType);
+    expect(!verdict.ok && verdict.reason).toBe('already_hatched');
   });
 });
 

@@ -120,6 +120,20 @@
       "when": 1790664618813,
       "tag": "0016_silent_mole_man",
       "breakpoints": true
+    },
+    {
+      "idx": 17,
+      "version": "7",
+      "when": 1790754712152,
+      "tag": "0017_gray_green_goblin",
+      "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "7",
+      "when": 1790754713152,
+      "tag": "0018_starter_incubators",
+      "breakpoints": true
     }
   ]
 }
