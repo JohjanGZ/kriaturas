@@ -1,5 +1,5 @@
-import { and, desc, eq, inArray, isNull, sql } from 'drizzle-orm';
-import { alias } from 'drizzle-orm/pg-core';
+import { and, desc, eq, inArray, isNull, sql } from "drizzle-orm";
+import { alias } from "drizzle-orm/pg-core";
 import {
   type BattleField,
   type BattleMode,
@@ -35,17 +35,18 @@ import {
   tileBag,
   tuneCombat,
   turnTick,
-} from '@/core';
-import { parseEffectList } from '@/core/effects/schema';
+} from "@/core";
+import { parseEffectList } from "@/core/effects/schema";
 import {
   type BaseElement,
   canFight,
   firstDuplicateElement,
   isBaseElement,
+  pickDistinctElements,
   resolveElement,
   superiorElementFor,
-} from '@/core/elements';
-import { advanceObjective } from '@/core/objectives';
+} from "@/core/elements";
+import { advanceObjective } from "@/core/objectives";
 import {
   type StoredBoard,
   type StoredField,
@@ -53,12 +54,16 @@ import {
   battleFieldSchema,
   storedBoardSchema,
   storedRivalListSchema,
-} from '@/core/schemas/battle';
-import { type CombatConfig, type PlayConfig, parseConfig } from '@/core/schemas/config';
-import { canPlay } from '@/core/stamina';
-import type { StaminaConfig } from '@/core/schemas/config';
-import { violates } from '@/lib/errors';
-import { getDb } from '../client';
+} from "@/core/schemas/battle";
+import {
+  type CombatConfig,
+  type PlayConfig,
+  parseConfig,
+} from "@/core/schemas/config";
+import { canPlay } from "@/core/stamina";
+import type { StaminaConfig } from "@/core/schemas/config";
+import { violates } from "@/lib/errors";
+import { getDb } from "../client";
 import {
   battleCreatures,
   battles,
@@ -70,8 +75,8 @@ import {
   objectives,
   players,
   species,
-} from '../schema';
-import { adjustmentFor, loadSeasonBalance } from './season';
+} from "../schema";
+import { adjustmentFor, loadSeasonBalance } from "./season";
 
 /**
  * Battle orchestration: the only place that turns a pair of coordinates into a
@@ -89,19 +94,30 @@ export type LoadedConfig = {
   gameId: string;
 };
 
-export async function loadGameConfig(slug = 'kriaturas'): Promise<LoadedConfig> {
+export async function loadGameConfig(
+  slug = "kriaturas",
+): Promise<LoadedConfig> {
   const db = await getDb();
-  const [game] = await db.select().from(games).where(eq(games.slug, slug)).limit(1);
-  if (!game) throw new Error(`No existe el juego "${slug}". Ejecuta npm run db:seed`);
+  const [game] = await db
+    .select()
+    .from(games)
+    .where(eq(games.slug, slug))
+    .limit(1);
+  if (!game)
+    throw new Error(`No existe el juego "${slug}". Ejecuta npm run db:seed`);
 
-  const rows = await db.select().from(gameConfigs).where(eq(gameConfigs.gameId, game.id));
-  const value = (key: string): unknown => rows.find((row) => row.key === key)?.value;
+  const rows = await db
+    .select()
+    .from(gameConfigs)
+    .where(eq(gameConfigs.gameId, game.id));
+  const value = (key: string): unknown =>
+    rows.find((row) => row.key === key)?.value;
 
   return {
     gameId: game.id,
-    combat: parseConfig('combat', value('combat')),
-    play: parseConfig('play', value('play')),
-    stamina: parseConfig('stamina', value('stamina')),
+    combat: parseConfig("combat", value("combat")),
+    play: parseConfig("play", value("play")),
+    stamina: parseConfig("stamina", value("stamina")),
   };
 }
 
@@ -118,15 +134,27 @@ export async function loadGameConfig(slug = 'kriaturas'): Promise<LoadedConfig> 
  */
 async function transformationPaths(
   db: Awaited<ReturnType<typeof getDb>>,
-  members: readonly { speciesId: string; element: string; isExcellent: boolean }[],
+  members: readonly {
+    speciesId: string;
+    element: string;
+    isExcellent: boolean;
+  }[],
 ): Promise<{
-  bonusOf: (member: { speciesId: string; element: string; isExcellent: boolean }) => number;
+  bonusOf: (member: {
+    speciesId: string;
+    element: string;
+    isExcellent: boolean;
+  }) => number;
   elementOf: (member: {
     speciesId: string;
     element: string;
     isExcellent: boolean;
   }) => string | null;
-  effectsOf: (member: { speciesId: string; element: string; isExcellent: boolean }) => unknown;
+  effectsOf: (member: {
+    speciesId: string;
+    element: string;
+    isExcellent: boolean;
+  }) => unknown;
 }> {
   const speciesIds = [...new Set(members.map((member) => member.speciesId))];
   const rows =
@@ -137,7 +165,11 @@ async function transformationPaths(
           .from(evolutionPaths)
           .where(inArray(evolutionPaths.speciesId, speciesIds));
 
-  const pick = (member: { speciesId: string; element: string; isExcellent: boolean }) => {
+  const pick = (member: {
+    speciesId: string;
+    element: string;
+    isExcellent: boolean;
+  }) => {
     const wanted = member.isExcellent
       ? superiorElementFor(member.element as BaseElement)
       : member.element;
@@ -158,7 +190,7 @@ async function transformationPaths(
 
 export type BattleView = {
   id: string;
-  status: 'active' | 'won' | 'lost' | 'abandoned';
+  status: "active" | "won" | "lost" | "abandoned";
   board: StoredBoard;
   rivals: StoredRival[];
   playerHp: number;
@@ -198,12 +230,14 @@ export type BattleView = {
   }[];
 };
 
-export async function getActiveBattle(playerId: string): Promise<BattleView | null> {
+export async function getActiveBattle(
+  playerId: string,
+): Promise<BattleView | null> {
   const db = await getDb();
   const [row] = await db
     .select()
     .from(battles)
-    .where(and(eq(battles.playerId, playerId), eq(battles.status, 'active')))
+    .where(and(eq(battles.playerId, playerId), eq(battles.status, "active")))
     .limit(1);
   if (!row) return null;
   return toView(row.id);
@@ -223,7 +257,9 @@ export async function getBattle(battleId: string): Promise<BattleView | null> {
  * reload, a closed tab and a slow connection, and it goes away only when the
  * player says so.
  */
-export async function getBattleToShow(playerId: string): Promise<BattleView | null> {
+export async function getBattleToShow(
+  playerId: string,
+): Promise<BattleView | null> {
   const db = await getDb();
 
   const active = await getActiveBattle(playerId);
@@ -235,7 +271,7 @@ export async function getBattleToShow(playerId: string): Promise<BattleView | nu
     .where(
       and(
         eq(battles.playerId, playerId),
-        inArray(battles.status, ['won', 'lost']),
+        inArray(battles.status, ["won", "lost"]),
         isNull(battles.dismissedAt),
       ),
     )
@@ -261,7 +297,11 @@ export async function dismissBattle(
 async function toView(battleId: string): Promise<BattleView | null> {
   const db = await getDb();
   const config = await loadGameConfig();
-  const [row] = await db.select().from(battles).where(eq(battles.id, battleId)).limit(1);
+  const [row] = await db
+    .select()
+    .from(battles)
+    .where(eq(battles.id, battleId))
+    .limit(1);
   if (!row) return null;
 
   const team = await db
@@ -315,7 +355,7 @@ async function toView(battleId: string): Promise<BattleView | null> {
     rivalFruits: row.rivalFruits,
     fruitsToEvolve: combat.fruitsToEvolve,
     canEvolve:
-      row.status === 'active' &&
+      row.status === "active" &&
       row.fruits >= combat.fruitsToEvolve &&
       team.some((member) => !member.evolvedInBattle),
     movesLeft: row.movesLeft,
@@ -325,7 +365,9 @@ async function toView(battleId: string): Promise<BattleView | null> {
       creatureId: member.creatureId,
       name: member.nickname ?? member.speciesName,
       element: member.element as BaseElement,
-      evolvedElement: member.evolvedInBattle ? transform.elementOf(member) : null,
+      evolvedElement: member.evolvedInBattle
+        ? transform.elementOf(member)
+        : null,
       evolvedInBattle: member.evolvedInBattle,
       isExcellent: member.isExcellent,
       attack:
@@ -342,13 +384,13 @@ async function toView(battleId: string): Promise<BattleView | null> {
 }
 
 export type StartBattleFailure =
-  | 'no_creatures'
-  | 'not_your_creature'
-  | 'battle_already_active'
-  | 'not_enough_stamina'
-  | 'creature_has_no_element'
-  | 'duplicate_element'
-  | 'no_enemies_available';
+  | "no_creatures"
+  | "not_your_creature"
+  | "battle_already_active"
+  | "not_enough_stamina"
+  | "creature_has_no_element"
+  | "duplicate_element"
+  | "no_enemies_available";
 
 export type StartBattleResult =
   | { ok: true; battleId: string }
@@ -365,7 +407,7 @@ export async function startBattle(
   playerId: string,
   creatureIds: readonly string[],
   now: Date,
-  mode: BattleMode = 'normal',
+  mode: BattleMode = "normal",
 ): Promise<StartBattleResult> {
   const db = await getDb();
   const config = await loadGameConfig();
@@ -378,7 +420,7 @@ export async function startBattle(
    * exists. From here on `combat` is the tuned config and nothing downstream
    * needs to know a field is involved.
    */
-  const field = mode === 'campos' ? rollField(Math.random) : null;
+  const field = mode === "campos" ? rollField(Math.random) : null;
   const combat = tuneCombat(config.combat, field);
   /**
    * The running season's adjustments. They are read HERE and copied into the
@@ -387,7 +429,7 @@ export async function startBattle(
    */
   const balance = await loadSeasonBalance();
 
-  if (creatureIds.length === 0) return { ok: false, reason: 'no_creatures' };
+  if (creatureIds.length === 0) return { ok: false, reason: "no_creatures" };
 
   const roster = await db
     .select({
@@ -405,10 +447,10 @@ export async function startBattle(
     .where(inArray(creatures.id, [...creatureIds]));
 
   if (roster.length !== creatureIds.length) {
-    return { ok: false, reason: 'not_your_creature' };
+    return { ok: false, reason: "not_your_creature" };
   }
   if (roster.some((row) => row.playerId !== playerId)) {
-    return { ok: false, reason: 'not_your_creature' };
+    return { ok: false, reason: "not_your_creature" };
   }
 
   /**
@@ -420,8 +462,10 @@ export async function startBattle(
    * refused here, before any stamina is spent, which is also why every query
    * downstream may treat a battle's creatures as having an element.
    */
-  if (roster.some((row) => !canFight(row.speciesElement, row.awakenedElement))) {
-    return { ok: false, reason: 'creature_has_no_element' };
+  if (
+    roster.some((row) => !canFight(row.speciesElement, row.awakenedElement))
+  ) {
+    return { ok: false, reason: "creature_has_no_element" };
   }
 
   /**
@@ -434,12 +478,14 @@ export async function startBattle(
    * request would otherwise walk straight past the disabled buttons.
    */
   const repeated = firstDuplicateElement(
-    roster.map((row) => resolveElement(row.speciesElement, row.awakenedElement)),
+    roster.map((row) =>
+      resolveElement(row.speciesElement, row.awakenedElement),
+    ),
   );
   if (repeated) {
     return {
       ok: false,
-      reason: 'duplicate_element',
+      reason: "duplicate_element",
       detail: `Dos kriaturas de ${repeated}: una gema cargaría las dos barras a la vez`,
     };
   }
@@ -453,7 +499,7 @@ export async function startBattle(
   if (tired && !tired.spend.ok) {
     return {
       ok: false,
-      reason: 'not_enough_stamina',
+      reason: "not_enough_stamina",
       detail: `Necesita ${tired.spend.required} de stamina y tiene ${tired.spend.staminaBefore}`,
     };
   }
@@ -469,22 +515,32 @@ export async function startBattle(
    * two species the query happened to return first.
    */
   const teamSpeciesIds = new Set(roster.map((row) => row.speciesId));
-  const pool = (await db.select().from(species).where(eq(species.isPublished, true))).filter(
-    (row) => row.baseElement !== null && !teamSpeciesIds.has(row.id),
-  );
-  if (pool.length === 0) return { ok: false, reason: 'no_enemies_available' };
+  const pool = (
+    await db.select().from(species).where(eq(species.isPublished, true))
+  ).filter((row) => row.baseElement !== null && !teamSpeciesIds.has(row.id));
+  if (pool.length === 0) return { ok: false, reason: "no_enemies_available" };
 
   /**
    * The rival lineup: two creatures, both on screen. They have no health —
    * damage goes to the rival PLAYER — so only their element and their hit
-   * matter here.
-   */
-  /**
-   * The rival lineup plays the board too, so it carries a bar like yours and
-   * only hits when that bar fills. Its mana cost comes from its own species,
+   * matter here. It plays the board too, so each carries a bar like yours and
+   * only hits when that bar fills; its mana cost comes from its own species,
    * which is what makes one rival pair pressure you faster than another.
+   *
+   * ONE ELEMENT EACH, and picked at RANDOM.
+   *
+   * The same rule your team obeys, applied where a lineup is BUILT rather than
+   * chosen. A rival pair sharing an element charges both bars off one gem and
+   * fires twice as often — the rule working against the player instead of for
+   * them, and invisible, because there is no form to grey out. Taking the first
+   * two of the pool also meant every battle faced the same two species.
    */
-  const rivals = pool.slice(0, 2).map((row) => {
+  const rivals = pickDistinctElements(
+    pool,
+    (row) => row.baseElement,
+    2,
+    Math.random,
+  ).map((row) => {
     const tuned = applyAdjustment(
       { attack: row.baseAttack, manaCost: row.manaCost },
       adjustmentFor(balance, row.id),
@@ -494,18 +550,18 @@ export async function startBattle(
       Math.round((tuned.manaCost * combat.rivalManaCostPercent) / 100),
     );
     return {
-    id: row.slug,
-    name: row.name,
-    element: row.baseElement,
-    /**
-     * The FULL species attack: a rival carries no effects, so its special is
-     * bare damage. Halving it on top made the rival's big moment land like a
-     * tap, and a fight with no threat is not a fight.
-     */
-    attack: Math.max(1, tuned.attack),
-    /** Cheaper than the species price: a rival has no effects to make up for it. */
-    manaCost: rivalManaCost,
-    mana: startingMana(rivalManaCost, combat),
+      id: row.slug,
+      name: row.name,
+      element: row.baseElement,
+      /**
+       * The FULL species attack: a rival carries no effects, so its special is
+       * bare damage. Halving it on top made the rival's big moment land like a
+       * tap, and a fight with no threat is not a fight.
+       */
+      attack: Math.max(1, tuned.attack),
+      /** Cheaper than the species price: a rival has no effects to make up for it. */
+      manaCost: rivalManaCost,
+      mana: startingMana(rivalManaCost, combat),
     };
   });
 
@@ -547,10 +603,11 @@ export async function startBattle(
           extraMoveUsed: false,
         })
         .returning();
-      if (!created) throw new Error('No se pudo crear la partida');
+      if (!created) throw new Error("No se pudo crear la partida");
 
       for (const [slot, entry] of spends.entries()) {
-        if (!entry.spend.ok) throw new Error('stamina check changed mid-transaction');
+        if (!entry.spend.ok)
+          throw new Error("stamina check changed mid-transaction");
         await tx
           .update(creatures)
           .set({ lastFed: entry.spend.lastFed })
@@ -573,26 +630,32 @@ export async function startBattle(
         });
       }
 
-      await advanceObjectives(tx, playerId, creatureIds, { matches_played: 1 }, now);
+      await advanceObjectives(
+        tx,
+        playerId,
+        creatureIds,
+        { matches_played: 1 },
+        now,
+      );
 
       return { ok: true as const, battleId: created.id };
     });
   } catch (error) {
     /** The unique index is what actually enforces one battle at a time. */
-    if (violates(error, 'battles_one_active_per_player')) {
-      return { ok: false, reason: 'battle_already_active' };
+    if (violates(error, "battles_one_active_per_player")) {
+      return { ok: false, reason: "battle_already_active" };
     }
     throw error;
   }
 }
 
 export type PlayMoveFailure =
-  | 'battle_not_found'
-  | 'not_your_battle'
-  | 'battle_finished'
-  | 'not_adjacent'
-  | 'out_of_bounds'
-  | 'no_match';
+  | "battle_not_found"
+  | "not_your_battle"
+  | "battle_finished"
+  | "not_adjacent"
+  | "out_of_bounds"
+  | "no_match";
 
 /**
  * One frame of the animation the browser replays.
@@ -677,7 +740,10 @@ function framesFor(steps: readonly CascadeStep[]): AnimationStep[] {
         cleared.push(position.row * step.boardAfter.width + position.col);
       }
     }
-    return { cleared: [...new Set(cleared)], tiles: [...step.boardAfter.tiles] };
+    return {
+      cleared: [...new Set(cleared)],
+      tiles: [...step.boardAfter.tiles],
+    };
   });
 }
 
@@ -719,7 +785,7 @@ export type PlayMoveResult =
         /** Cells a mine took with it this turn — they charged nobody. */
         detonated: number[];
         /** How the field stirred the board when the turn ended. */
-        stirred: 'shuffled' | 'gale' | null;
+        stirred: "shuffled" | "gale" | null;
         /** Life the ground gave you (or took) this turn. */
         fieldHealed: number;
         /** Board cells a power repainted, and into what. */
@@ -732,7 +798,7 @@ export type PlayMoveResult =
         foodGained: number;
         coinsGained: number;
         cascades: number;
-        status: 'active' | 'won' | 'lost' | 'abandoned';
+        status: "active" | "won" | "lost" | "abandoned";
       };
     }
   | { ok: false; reason: PlayMoveFailure };
@@ -751,13 +817,18 @@ export async function playMove(
   const db = await getDb();
   const config = await loadGameConfig();
 
-  const [row] = await db.select().from(battles).where(eq(battles.id, battleId)).limit(1);
-  if (!row) return { ok: false, reason: 'battle_not_found' };
-  if (row.playerId !== playerId) return { ok: false, reason: 'not_your_battle' };
-  if (row.status !== 'active') return { ok: false, reason: 'battle_finished' };
+  const [row] = await db
+    .select()
+    .from(battles)
+    .where(eq(battles.id, battleId))
+    .limit(1);
+  if (!row) return { ok: false, reason: "battle_not_found" };
+  if (row.playerId !== playerId)
+    return { ok: false, reason: "not_your_battle" };
+  if (row.status !== "active") return { ok: false, reason: "battle_finished" };
 
   const view = await toView(battleId);
-  if (!view) return { ok: false, reason: 'battle_not_found' };
+  if (!view) return { ok: false, reason: "battle_not_found" };
 
   /**
    * THE FIELD BENDS THE RULES BEFORE ANYTHING ELSE READS THEM.
@@ -767,7 +838,9 @@ export async function playMove(
    * exists. That is why five of the ten fields needed no code at all: they are
    * this config with different numbers.
    */
-  let field: BattleField | null = row.field ? battleFieldSchema.parse(row.field) : null;
+  let field: BattleField | null = row.field
+    ? battleFieldSchema.parse(row.field)
+    : null;
   const combat = tuneCombat(config.combat, field);
 
   /** Drakofruta is the rare tile: the bag is what makes it rare. */
@@ -872,8 +945,14 @@ export async function playMove(
     fruits: row.fruits,
     rivalFruits: row.rivalFruits,
     /** Powers that outlive a move: poison ticking and shortened turns. */
-    playerPoison: { perMove: row.playerPoisonPerMove, turns: row.playerPoisonTurns },
-    rivalPoison: { perMove: row.rivalPoisonPerMove, turns: row.rivalPoisonTurns },
+    playerPoison: {
+      perMove: row.playerPoisonPerMove,
+      turns: row.playerPoisonTurns,
+    },
+    rivalPoison: {
+      perMove: row.rivalPoisonPerMove,
+      turns: row.rivalPoisonTurns,
+    },
     playerMovePenalty: row.playerMovePenalty,
     rivalMovePenalty: row.rivalMovePenalty,
     playerFruitBlockTurns: row.playerFruitBlockTurns,
@@ -887,7 +966,7 @@ export async function playMove(
     turn: row.turn,
     movesLeft: row.movesLeft,
     extraMoveUsed: row.extraMoveUsed,
-    status: 'active',
+    status: "active",
   };
 
   /** Conditions like `damage_by_type` read the front rival's element. */
@@ -897,14 +976,16 @@ export async function playMove(
     enemyElements: rivals.map((entry) => entry.element),
     battle: {
       selfHealthPercent: Math.round((state.playerHp / state.playerMaxHp) * 100),
-      enemyHealthPercent: Math.round((state.opponentHp / state.opponentMaxHp) * 100),
+      enemyHealthPercent: Math.round(
+        (state.opponentHp / state.opponentMaxHp) * 100,
+      ),
       fruits: state.fruits,
       turn: state.turn + 1,
     },
     config: combat,
   });
   const played = applyPlayerMove(state, outcome, combat);
-  state = applyPowers(played.state, outcome.powers, 'player');
+  state = applyPowers(played.state, outcome.powers, "player");
 
   /** The two powers that edit the board. Both resolved here, never in the browser. */
   let board: Board = move.board;
@@ -959,7 +1040,7 @@ export async function playMove(
    * predictable than yours.
    */
   /** What the ground did this turn, so the browser can say why things moved. */
-  let stirred: 'shuffled' | 'gale' | null = null;
+  let stirred: "shuffled" | "gale" | null = null;
   let fieldHealth = { playerDelta: 0, opponentDelta: 0 };
 
   const rivalMoves: RivalMoveView[] = [];
@@ -971,14 +1052,14 @@ export async function playMove(
   let damageToPlayer = 0;
   const rivalSpecials: string[] = [];
 
-  if (played.log.turnOver && state.status === 'active') {
+  if (played.log.turnOver && state.status === "active") {
     if (combat.botEnabled) {
       /** A move you stole comes off the bot's turn — never below one. */
       let budget = Math.max(1, combat.movesPerTurn - state.rivalMovePenalty);
       let bonusTaken = false;
       state = { ...state, rivalMovePenalty: 0 };
 
-      while (budget > 0 && state.status === 'active') {
+      while (budget > 0 && state.status === "active") {
         /** Rebuilt every move, so the bot's bars carry within its own turn. */
         const botTeam: Combatant[] = state.rivals
           .filter((rival) => isBaseElement(rival.element))
@@ -1025,19 +1106,26 @@ export async function playMove(
           enemyElements: team.map((entry) => entry.baseElement),
           /** Mirrored: the bot's "self" is the opponent side of the row. */
           battle: {
-            selfHealthPercent: Math.round((state.opponentHp / state.opponentMaxHp) * 100),
-            enemyHealthPercent: Math.round((state.playerHp / state.playerMaxHp) * 100),
+            selfHealthPercent: Math.round(
+              (state.opponentHp / state.opponentMaxHp) * 100,
+            ),
+            enemyHealthPercent: Math.round(
+              (state.playerHp / state.playerMaxHp) * 100,
+            ),
             fruits: state.rivalFruits,
             turn: state.turn + 1,
           },
           config: combat,
         });
         const answered = applyRivalMove(state, botOutcome, combat);
-        state = applyPowers(answered.state, botOutcome.powers, 'rival');
+        state = applyPowers(answered.state, botOutcome.powers, "rival");
 
         /** The bot paints the board too, with its own element. */
         let botBoard: Board = botMove.board;
-        if (botOutcome.powers.convertedTiles > 0 && botOutcome.powers.convertElement) {
+        if (
+          botOutcome.powers.convertedTiles > 0 &&
+          botOutcome.powers.convertElement
+        ) {
           botBoard = convertTiles(
             botBoard,
             botOutcome.powers.convertElement,
@@ -1078,7 +1166,8 @@ export async function playMove(
       const transforms = rivalToEvolve(state, combat);
       if (transforms) {
         state = evolveRivalInBattle(state, transforms, combat);
-        rivalEvolved = state.rivals.find((rival) => rival.id === transforms)?.name ?? null;
+        rivalEvolved =
+          state.rivals.find((rival) => rival.id === transforms)?.name ?? null;
       }
     } else {
       /** The bot switched off: the lineup just swings for the sum of its attacks. */
@@ -1116,7 +1205,10 @@ export async function playMove(
    * when it is dead. The player is told, because the board visibly changes.
    */
   let reshuffled = false;
-  if (state.status === 'active' && !hasValidMove(board, combat.minMatchLength)) {
+  if (
+    state.status === "active" &&
+    !hasValidMove(board, combat.minMatchLength)
+  ) {
     board = createPlayableBoard(
       {
         width: combat.boardWidth,
@@ -1129,7 +1221,7 @@ export async function playMove(
     reshuffled = true;
   }
 
-  const finished = state.status !== 'active';
+  const finished = state.status !== "active";
 
   await db.transaction(async (tx) => {
     await tx
@@ -1195,9 +1287,9 @@ export async function playMove(
       creatureIds,
       {
         damage_dealt: played.log.damageToOpponent,
-        enemies_defeated: state.status === 'won' ? 1 : 0,
+        enemies_defeated: state.status === "won" ? 1 : 0,
         max_combo: outcome.longestCombo,
-        matches_won: state.status === 'won' ? 1 : 0,
+        matches_won: state.status === "won" ? 1 : 0,
         element_gems_cleared_fire: outcome.gemsByElement.fire,
         element_gems_cleared_water: outcome.gemsByElement.water,
         element_gems_cleared_plant: outcome.gemsByElement.plant,
@@ -1212,9 +1304,13 @@ export async function playMove(
      * be claimed twice. The board's drakofruta pays no wallet: it was already
      * spent on the battle it was found in.
      */
-    const won = state.status === 'won';
+    const won = state.status === "won";
     if (outcome.foodGained > 0 || won) {
-      const [player] = await tx.select().from(players).where(eq(players.id, playerId)).limit(1);
+      const [player] = await tx
+        .select()
+        .from(players)
+        .where(eq(players.id, playerId))
+        .limit(1);
       if (player) {
         await tx
           .update(players)
@@ -1228,7 +1324,7 @@ export async function playMove(
   });
 
   const refreshed = await toView(battleId);
-  if (!refreshed) return { ok: false, reason: 'battle_not_found' };
+  if (!refreshed) return { ok: false, reason: "battle_not_found" };
 
   return {
     ok: true,
@@ -1264,7 +1360,7 @@ export async function playMove(
       poisonDealt: rivalPoisonDealt,
       gemsByElement: outcome.gemsByElement,
       foodGained: outcome.foodGained,
-      coinsGained: state.status === 'won' ? config.play.coinsPerWin : 0,
+      coinsGained: state.status === "won" ? config.play.coinsPerWin : 0,
       cascades: outcome.cascades,
       status: state.status,
     },
@@ -1272,12 +1368,12 @@ export async function playMove(
 }
 
 export type EvolveInBattleFailure =
-  | 'battle_not_found'
-  | 'not_your_battle'
-  | 'battle_finished'
-  | 'not_enough_fruits'
-  | 'not_in_battle'
-  | 'already_evolved';
+  | "battle_not_found"
+  | "not_your_battle"
+  | "battle_finished"
+  | "not_enough_fruits"
+  | "not_in_battle"
+  | "already_evolved";
 
 export type EvolveInBattleOutcome =
   | { ok: true; view: BattleView; name: string; element: string | null }
@@ -1299,13 +1395,18 @@ export async function evolveCreatureInBattle(
   const db = await getDb();
   const config = await loadGameConfig();
 
-  const [row] = await db.select().from(battles).where(eq(battles.id, battleId)).limit(1);
-  if (!row) return { ok: false, reason: 'battle_not_found' };
-  if (row.playerId !== playerId) return { ok: false, reason: 'not_your_battle' };
-  if (row.status !== 'active') return { ok: false, reason: 'battle_finished' };
+  const [row] = await db
+    .select()
+    .from(battles)
+    .where(eq(battles.id, battleId))
+    .limit(1);
+  if (!row) return { ok: false, reason: "battle_not_found" };
+  if (row.playerId !== playerId)
+    return { ok: false, reason: "not_your_battle" };
+  if (row.status !== "active") return { ok: false, reason: "battle_finished" };
 
   const view = await toView(battleId);
-  if (!view) return { ok: false, reason: 'battle_not_found' };
+  if (!view) return { ok: false, reason: "battle_not_found" };
 
   /** Only the fields the decision needs; the rest of the battle is untouched. */
   const state: BattleState = {
@@ -1330,8 +1431,14 @@ export async function evolveCreatureInBattle(
     rivals: view.rivals.map((rival) => ({ ...rival })),
     fruits: view.fruits,
     rivalFruits: view.rivalFruits,
-    playerPoison: { perMove: row.playerPoisonPerMove, turns: row.playerPoisonTurns },
-    rivalPoison: { perMove: row.rivalPoisonPerMove, turns: row.rivalPoisonTurns },
+    playerPoison: {
+      perMove: row.playerPoisonPerMove,
+      turns: row.playerPoisonTurns,
+    },
+    rivalPoison: {
+      perMove: row.rivalPoisonPerMove,
+      turns: row.rivalPoisonTurns,
+    },
     playerMovePenalty: row.playerMovePenalty,
     rivalMovePenalty: row.rivalMovePenalty,
     playerFruitBlockTurns: row.playerFruitBlockTurns,
@@ -1345,7 +1452,7 @@ export async function evolveCreatureInBattle(
     turn: view.turn,
     movesLeft: view.movesLeft,
     extraMoveUsed: view.extraMoveUsed,
-    status: 'active',
+    status: "active",
   };
 
   const verdict = evolveInBattle(state, creatureId, config.combat);
@@ -1361,28 +1468,37 @@ export async function evolveCreatureInBattle(
       .update(battleCreatures)
       .set({ evolvedInBattle: true })
       .where(
-        and(eq(battleCreatures.battleId, battleId), eq(battleCreatures.creatureId, creatureId)),
+        and(
+          eq(battleCreatures.battleId, battleId),
+          eq(battleCreatures.creatureId, creatureId),
+        ),
       );
   });
 
   const refreshed = await toView(battleId);
-  if (!refreshed) return { ok: false, reason: 'battle_not_found' };
+  if (!refreshed) return { ok: false, reason: "battle_not_found" };
 
-  const member = refreshed.team.find((entry) => entry.creatureId === creatureId);
+  const member = refreshed.team.find(
+    (entry) => entry.creatureId === creatureId,
+  );
   return {
     ok: true,
     view: refreshed,
-    name: member?.name ?? 'Tu kriatura',
+    name: member?.name ?? "Tu kriatura",
     element: member?.evolvedElement ?? null,
   };
 }
 
-export async function abandonBattle(battleId: string, playerId: string, now: Date): Promise<void> {
+export async function abandonBattle(
+  battleId: string,
+  playerId: string,
+  now: Date,
+): Promise<void> {
   const db = await getDb();
   /** Abandoning IS the acknowledgement, so it never shows a result screen. */
   await db
     .update(battles)
-    .set({ status: 'abandoned', endedAt: now, dismissedAt: now })
+    .set({ status: "abandoned", endedAt: now, dismissedAt: now })
     .where(and(eq(battles.id, battleId), eq(battles.playerId, playerId)));
 }
 
@@ -1407,14 +1523,16 @@ async function advanceObjectives(
 
   for (const objective of catalog) {
     const key =
-      objective.metric === 'element_gems_cleared'
-        ? `element_gems_cleared_${(objective.params as { element?: string }).element ?? ''}`
+      objective.metric === "element_gems_cleared"
+        ? `element_gems_cleared_${(objective.params as { element?: string }).element ?? ""}`
         : objective.metric;
     const amount = deltas[key];
     if (amount === undefined || amount === 0) continue;
 
     const targets =
-      objective.scope === 'creature' ? creatureIds.map((id) => id) : [null as string | null];
+      objective.scope === "creature"
+        ? creatureIds.map((id) => id)
+        : [null as string | null];
 
     for (const creatureId of targets) {
       const existing = await tx
@@ -1432,8 +1550,15 @@ async function advanceObjectives(
 
       const current = existing[0];
       const update = advanceObjective(
-        { id: objective.id, metric: objective.metric, targetValue: objective.targetValue },
-        { currentValue: current?.currentValue ?? 0, completedAt: current?.completedAt ?? null },
+        {
+          id: objective.id,
+          metric: objective.metric,
+          targetValue: objective.targetValue,
+        },
+        {
+          currentValue: current?.currentValue ?? 0,
+          completedAt: current?.completedAt ?? null,
+        },
         amount,
         now,
       );
@@ -1442,7 +1567,10 @@ async function advanceObjectives(
       if (current) {
         await tx
           .update(objectiveProgress)
-          .set({ currentValue: update.currentValue, completedAt: update.completedAt })
+          .set({
+            currentValue: update.currentValue,
+            completedAt: update.completedAt,
+          })
           .where(eq(objectiveProgress.id, current.id));
       } else {
         await tx.insert(objectiveProgress).values({

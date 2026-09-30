@@ -251,6 +251,12 @@ client sends creature ids and a crafted request walks straight past a disabled b
 
 A white creature is not "the same element as another white one": it charges on nothing, so it is
 skipped rather than counted as a duplicate — it is already refused for having no element.
+
+**The RIVAL pair obeys it too** (`pickDistinctElements`), and that half matters more: a lineup is
+BUILT by the server rather than chosen, so there is no form to grey out — a rival pair sharing an
+element simply charges both bars off one gem and fires twice as often, with nothing on screen to
+say why. It is also picked at RANDOM now; taking the first two of the pool meant every battle
+faced the same two species.
 - A result carries `settled: false` when the cascade cap stopped the loop with runs still on
   the board; the caller must resolve again or reshuffle rather than hand that to the player.
 

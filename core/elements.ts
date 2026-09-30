@@ -141,5 +141,46 @@ export function firstDuplicateElement(
   }
   return null;
 }
+
+/**
+ * Picks up to `count` items, all of DIFFERENT elements, at random.
+ *
+ * The same rule the player's team obeys, applied where a lineup is BUILT
+ * instead of chosen: the rival pair is assembled by the server, so there is no
+ * form to grey out — a pair sharing an element would just quietly fire twice as
+ * often, which is the rule working against the player rather than for them.
+ *
+ * At random, and not the first two in the pool, because a fixed pair means every
+ * battle is the same battle. Items with no element are skipped: nothing on the
+ * board would ever charge them.
+ *
+ * Returns fewer than `count` when the pool cannot fill it. That is a real state
+ * — a catalogue with one element in it — and a lineup of one is better than
+ * refusing to start.
+ */
+export function pickDistinctElements<T>(
+  items: readonly T[],
+  elementOf: (item: T) => string | null | undefined,
+  count: number,
+  random: () => number,
+): T[] {
+  const remaining = [...items];
+  const taken = new Set<string>();
+  const picked: T[] = [];
+
+  while (picked.length < count && remaining.length > 0) {
+    const index = Math.min(remaining.length - 1, Math.floor(random() * remaining.length));
+    const [candidate] = remaining.splice(index, 1);
+    if (candidate === undefined) break;
+
+    const element = elementOf(candidate);
+    if (!element || taken.has(element)) continue;
+
+    taken.add(element);
+    picked.push(candidate);
+  }
+
+  return picked;
+}
 export const evolvedElementSchema = z.enum(EVOLVED_ELEMENTS);
 export const elementSchema = z.enum(ELEMENTS);

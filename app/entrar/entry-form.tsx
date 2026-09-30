@@ -13,7 +13,14 @@ function Pending({ label, primary }: { label: string; primary?: boolean }) {
   );
 }
 
-export function EntryForm({ adminDoor }: { adminDoor: boolean }) {
+export function EntryForm({
+  adminDoor,
+  guestAlready,
+}: {
+  adminDoor: boolean;
+  /** With a game already going, "empezar" would silently abandon it. */
+  guestAlready?: boolean;
+}) {
   const [guest, enterAsGuest] = useActionState(enterAsGuestAction, { ok: false } satisfies EntryState);
   const [admin, enterAsAdmin] = useActionState(enterAsAdminAction, { ok: false } satisfies EntryState);
 
@@ -22,9 +29,11 @@ export function EntryForm({ adminDoor }: { adminDoor: boolean }) {
       {guest.message ? <p className="notice notice-error">{guest.message}</p> : null}
       {admin.message ? <p className="notice notice-error">{admin.message}</p> : null}
 
-      <form action={enterAsGuest}>
-        <Pending primary label="Empezar a jugar" />
-      </form>
+      {guestAlready ? null : (
+        <form action={enterAsGuest}>
+          <Pending primary label="Empezar a jugar" />
+        </form>
+      )}
 
       {adminDoor ? (
         <form action={enterAsAdmin} style={{ marginTop: '0.8rem' }}>
