@@ -2409,3 +2409,21 @@ th {
     animation: facing 48s steps(1) infinite alternate;
   }
 }
+
+/* Enferma: quieta, gris y con su aviso. Se lee antes que cualquier número. */
+.grazing-sick .grazing-body {
+  filter: grayscale(0.85) brightness(0.7);
+  animation-play-state: paused;
+}
+
+.grazing-sick {
+  animation-play-state: paused;
+}
+
+.grazing-sick-mark {
+  position: absolute;
+  top: -6px;
+  right: -2px;
+  font-size: 0.9rem;
+  filter: drop-shadow(0 1px 2px rgb(0 0 0 / 0.7));
+}

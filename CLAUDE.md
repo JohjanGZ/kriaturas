@@ -211,6 +211,40 @@ ceiling turns "one more creature" into a decision and gives coins a second thing
 - **Creatures with no corral are adopted on sight.** Anything born before corrals existed gets a
   place when the page loads, rather than needing a data migration nobody remembers to run.
 
+### Enfermar — el precio de exprimir a una kriatura
+
+La regla cabe en una frase: **si la dejas seca, puede enfermar**. Y esa frase es lo que la
+salva, porque la stamina solo baja JUGANDO — el modelo garantiza que la ausencia únicamente
+puede subirla. Desaparecer una semana deja a las kriaturas **más** seguras, no menos, así que
+esto nunca castiga por no estar. `core/health` lo resuelve, puro y con el azar inyectado.
+
+- **Se tira UNA vez**, cuando la kriatura cae por debajo del mínimo para jugar. Tirar en cada
+  partida suena parecido y no lo es: con cuatro partidas por sesión y un 20% cada una, **el 43%
+  de las sesiones acabarían en enfermedad**. Una sola tirada lo deja en una de cada cinco, y
+  crea la decisión de verdad — ¿juego la última o la dejo con algo en la barra?
+- **Cero al 100%, no un 1%.** Un suelo significa que una kriatura puede enfermar sin que
+  pudieras haberlo evitado, que es exactamente la sensación que esto evita. Cero es una promesa
+  sobre la que decidir: aliméntala y está a salvo.
+- **La curva es convexa** (`chance × (1 − stamina/máx)³`). Recta, media barra ya daría la mitad
+  del riesgo y sería un impuesto constante; al cubo la zona segura es ancha y el peligro es un
+  aviso claro al final: 0,3% a 15/20, 2,5% a 10/20, 8,4% a 5/20, 20% en seco.
+- **Enferma es DÉBIL, no muerta.** La barra sigue subiendo con el techo al 25%
+  (`staminaCeiling`), así que darle de comer sigue haciendo algo — "la comida no hace nada" se
+  lee como un botón roto. Pero no puede pelear: dejarla entrar floja convertiría enfermar en un
+  número peor en vez de un acontecimiento.
+- **La comida no cura, ni por la puerta de atrás.** `feed` recorta el ancla al TECHO y no a la
+  barra llena; si la arrastrara más atrás, la kriatura aparecería al máximo en el instante de
+  curarse y la comida habría comprado la cura de tapadillo. Hay una prueba para eso.
+
+**La cura siempre se puede comprar** (`curePriceCoins`, 150). Ese camino es lo que hace
+aceptable que enfermar duela: el precio son monedas, no días esperando a terminar recados. Las
+misiones serán la vía GRATIS para quien no tenga monedas — el mismo principio que las baterías
+de las incubadoras, **las monedas compran tiempo, nunca perdón**.
+
+La cura se limpia con `WHERE sick_since IS NOT NULL` y no según la lectura previa: dos curas
+compradas a la vez pasarían las dos una comprobación hecha en TypeScript, y la segunda no puede
+cobrar por nada.
+
 ### A still image that walks
 
 The creatures will be fixed artwork, so the animation is not of the DRAWING — it is of its

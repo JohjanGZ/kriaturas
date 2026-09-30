@@ -94,6 +94,7 @@ const REASONS: Record<string, string> = {
   not_enough_stamina: 'Tu kriatura está agotada. Dale de comer y vuelve.',
   creature_has_no_element:
     'Esa kriatura todavía no tiene elemento: ninguna gema del tablero la cargaría. Necesita una piedra elemental.',
+  creature_is_sick: 'Esa kriatura está enferma. Cúrala en el corral.',
   duplicate_element:
     'No puedes llevar dos kriaturas del mismo elemento: una sola gema cargaría las dos barras.',
   no_enemies_available: 'No hay especies publicadas para formar enemigos',

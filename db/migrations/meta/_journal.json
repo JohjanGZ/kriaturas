@@ -148,6 +148,13 @@
       "when": 1790793988411,
       "tag": "0020_early_the_leader",
       "breakpoints": true
+    },
+    {
+      "idx": 21,
+      "version": "7",
+      "when": 1790796246895,
+      "tag": "0021_melodic_jubilee",
+      "breakpoints": true
     }
   ]
 }

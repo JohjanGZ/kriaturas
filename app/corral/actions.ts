@@ -3,7 +3,7 @@
 import { revalidatePath } from 'next/cache';
 import { z } from 'zod';
 import { feedCreatureSchema } from '@/core/schemas/creature';
-import { buyCorral, moveCreature } from '@/db/queries/corral';
+import { buyCorral, cureCreature, moveCreature } from '@/db/queries/corral';
 import { feedCreature } from '@/db/queries/creature';
 import { getCurrentPlayer } from '@/lib/auth';
 
@@ -23,6 +23,7 @@ const REASONS: Record<string, string> = {
   not_enough_food: 'No tienes comida suficiente',
   already_full: 'Ya está descansada del todo',
   creature_not_found: 'Esa kriatura no existe',
+  not_sick: 'Esa kriatura no está enferma',
 };
 
 const describe = (reason: string): string => REASONS[reason] ?? 'No se pudo completar';
@@ -95,5 +96,31 @@ export async function moveCreatureAction(
   revalidatePath('/corral');
   return result.ok
     ? { ok: true, message: 'Kriatura movida' }
+    : { ok: false, message: describe(result.reason) };
+}
+
+/**
+ * La cura comprada. El PRECIO no viaja: se lee de la config en el servidor,
+ * como todo lo que cuesta algo en este juego.
+ */
+export async function cureAction(
+  _prev: CorralActionState,
+  form: FormData,
+): Promise<CorralActionState> {
+  const player = await getCurrentPlayer();
+  if (!player) return { ok: false, message: 'No hay jugador' };
+
+  const parsed = z
+    .strictObject({ creatureId: z.uuid() })
+    .safeParse({ creatureId: String(form.get('creatureId') ?? '') });
+  if (!parsed.success) return { ok: false, message: 'Kriatura no válida' };
+
+  const result = await cureCreature(parsed.data.creatureId, player.id);
+  revalidatePath('/corral');
+  revalidatePath('/kriaturas');
+  revalidatePath('/jugar');
+
+  return result.ok
+    ? { ok: true, message: `Curada. Pagaste ${result.paid} monedas.` }
     : { ok: false, message: describe(result.reason) };
 }

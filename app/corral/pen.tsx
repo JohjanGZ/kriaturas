@@ -5,7 +5,12 @@ import Link from 'next/link';
 import { useFormStatus } from 'react-dom';
 import type { CorralShelf, PennedCreature } from '@/db/queries/corral';
 import { CreatureArt, type ArtElement } from '../creature-art';
-import { type CorralActionState, buyCorralAction, feedInCorralAction } from './actions';
+import {
+  type CorralActionState,
+  buyCorralAction,
+  cureAction,
+  feedInCorralAction,
+} from './actions';
 
 /**
  * EL CORRAL.
@@ -60,7 +65,9 @@ function Grazing({
   return (
     <button
       type="button"
-      className={`grazing${selected ? ' grazing-on' : ''}${creature.rested ? '' : ' grazing-tired'}`}
+      className={`grazing${selected ? ' grazing-on' : ''}${
+        creature.rested ? '' : ' grazing-tired'
+      }${creature.sickSince ? ' grazing-sick' : ''}`}
       style={
         {
           '--lane': `${wander.lane}%`,
@@ -92,6 +99,12 @@ function Grazing({
           style={{ width: `${share}%` }}
         />
       </span>
+      {/* Se ve que está mala antes de leer nada: se para, se apaga y avisa. */}
+      {creature.sickSince ? (
+        <span className="grazing-sick-mark" aria-hidden="true">
+          🤒
+        </span>
+      ) : null}
       <span className="grazing-name">{creature.name}</span>
     </button>
   );
@@ -103,6 +116,7 @@ export function Pen({ shelf }: { shelf: CorralShelf }) {
     ok: false,
   } satisfies CorralActionState);
   const [buy, doBuy] = useActionState(buyCorralAction, { ok: false } satisfies CorralActionState);
+  const [cure, doCure] = useActionState(cureAction, { ok: false } satisfies CorralActionState);
 
   const everyone = [...shelf.corrals.flatMap((pen) => pen.creatures), ...shelf.loose];
   const chosen = everyone.find((creature) => creature.id === picked) ?? null;
@@ -119,6 +133,9 @@ export function Pen({ shelf }: { shelf: CorralShelf }) {
       ) : null}
       {buy.message ? (
         <p className={`notice ${buy.ok ? 'notice-ok' : 'notice-error'}`}>{buy.message}</p>
+      ) : null}
+      {cure.message ? (
+        <p className={`notice ${cure.ok ? 'notice-ok' : 'notice-error'}`}>{cure.message}</p>
       ) : null}
 
       {shelf.corrals.map((pen) => (
@@ -188,12 +205,36 @@ export function Pen({ shelf }: { shelf: CorralShelf }) {
               </div>
               <div className="small">
                 Stamina {chosen.stamina}/{chosen.maxStamina}
-                {chosen.rested ? '' : ' — demasiado cansada para jugar'}
+                {chosen.sickSince
+                  ? ' — enferma, con el techo bajo'
+                  : chosen.rested
+                    ? ''
+                    : ' — demasiado cansada para jugar'}
               </div>
             </div>
           </div>
 
+          {chosen.sickSince ? (
+            <p className="small muted">
+              Enfermó por quedarse seca. No puede pelear hasta curarla — y darle de comer ya no
+              le sube la barra más allá de su techo.
+            </p>
+          ) : null}
+
           <div className="row" style={{ gap: '0.5rem', flexWrap: 'wrap' }}>
+            {chosen.sickSince ? (
+              <form action={doCure}>
+                <input type="hidden" name="creatureId" value={chosen.id} />
+                <Pending
+                  primary={shelf.coins >= chosen.curePrice}
+                  label={
+                    shelf.coins >= chosen.curePrice
+                      ? `Curar · ${chosen.curePrice} monedas`
+                      : `Curar cuesta ${chosen.curePrice}`
+                  }
+                />
+              </form>
+            ) : null}
             <form action={doFeed}>
               <input type="hidden" name="creatureId" value={chosen.id} />
               <input type="hidden" name="foodUnits" value={1} />

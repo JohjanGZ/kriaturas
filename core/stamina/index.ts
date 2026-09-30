@@ -62,7 +62,18 @@ export function initialAnchor(now: Date, config: StaminaConfig): Date {
   return new Date(fullAnchorMs(now, config));
 }
 
-export function deriveStamina(lastFed: Date, now: Date, config: StaminaConfig): StaminaSnapshot {
+export function deriveStamina(
+  lastFed: Date,
+  now: Date,
+  config: StaminaConfig,
+  /**
+   * How high the bar may go — the whole thing unless something is capping it.
+   * A sick creature keeps regenerating but stops early, which is what makes
+   * illness "weak" rather than "frozen": feeding still does something, it just
+   * cannot do much.
+   */
+  ceiling: number = config.maxStamina,
+): StaminaSnapshot {
   const perPoint = msPerPoint(config);
   const elapsedMs = now.getTime() - lastFed.getTime();
 
@@ -71,16 +82,18 @@ export function deriveStamina(lastFed: Date, now: Date, config: StaminaConfig): 
    * normal state right after playing. Math.floor takes it further negative, and
    * the clamp brings it to 0. Stamina is never negative.
    */
+  const top = Math.min(Math.max(1, ceiling), config.maxStamina);
   const raw = Math.floor(elapsedMs / perPoint);
-  const current = Math.min(Math.max(raw, 0), config.maxStamina);
-  const isFull = current >= config.maxStamina;
+  const current = Math.min(Math.max(raw, 0), top);
+  /** "Full" means "as high as it can get", which for a sick one is its ceiling. */
+  const isFull = current >= top;
 
   const nextPointAtMs = lastFed.getTime() + (Math.max(raw, 0) + 1) * perPoint;
-  const fullAtMs = lastFed.getTime() + config.maxStamina * perPoint;
+  const fullAtMs = lastFed.getTime() + top * perPoint;
 
   return {
     current,
-    max: config.maxStamina,
+    max: top,
     isFull,
     secondsUntilNextPoint: isFull ? null : Math.ceil((nextPointAtMs - now.getTime()) / MS),
     secondsUntilFull: isFull ? 0 : Math.ceil((fullAtMs - now.getTime()) / MS),
@@ -162,26 +175,35 @@ export function feed(
   now: Date,
   units: number,
   config: StaminaConfig,
+  /** A sick creature cannot be fed past its ceiling — food is not a cure. */
+  ceiling: number = config.maxStamina,
 ): FeedResult {
-  const before = deriveStamina(lastFed, now, config).current;
-  if (before >= config.maxStamina) {
+  const top = Math.min(Math.max(1, ceiling), config.maxStamina);
+  const before = deriveStamina(lastFed, now, config, top).current;
+  if (before >= top) {
     return { ok: false, reason: 'already_full', staminaBefore: before };
   }
 
-  const missing = config.maxStamina - before;
+  const missing = top - before;
   const unitsNeeded = Math.ceil(missing / config.staminaPerFood);
   const unitsConsumed = Math.min(units, unitsNeeded);
   const restored = unitsConsumed * config.staminaPerFood;
 
   const anchor = normalizeAnchor(lastFed, now, config).getTime();
   const pulled = anchor - restored * msPerPoint(config);
-  const clamped = Math.max(pulled, fullAnchorMs(now, config));
+  /**
+   * The anchor is clamped to the CEILING, not to the full bar. Pulling it
+   * further back would park a sick creature's anchor so early that the moment
+   * it is cured it would already be at maximum — food would have bought a cure
+   * through the back door.
+   */
+  const clamped = Math.max(pulled, now.getTime() - top * msPerPoint(config));
 
   return {
     ok: true,
     lastFed: new Date(clamped),
     staminaBefore: before,
-    staminaAfter: Math.min(before + restored, config.maxStamina),
+    staminaAfter: Math.min(before + restored, top),
     unitsConsumed,
   };
 }

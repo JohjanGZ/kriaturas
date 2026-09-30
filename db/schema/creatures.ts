@@ -97,6 +97,18 @@ export const creatures = pgTable(
     /** Stamina regeneration anchor. See the note above. */
     lastFed: tstz('last_fed').notNull().defaultNow(),
 
+    /**
+     * ENFERMA DESDE. Null es sana.
+     *
+     * Un instante y no un booleano: así se puede decir cuánto lleva mala, que
+     * es lo que hace que enfermar sea una historia y no un estado. Se escribe
+     * cuando la kriatura cae por debajo del mínimo para jugar y el dado sale —
+     * nunca por el paso del tiempo, nunca por estar el jugador ausente.
+     *
+     * Enferma no es muerta: la barra sigue subiendo, con el techo bajo.
+     */
+    sickSince: tstz('sick_since'),
+
     ...timestamps,
   },
   (t) => [

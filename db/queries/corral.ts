@@ -1,5 +1,6 @@
-import { and, asc, eq, isNull } from 'drizzle-orm';
+import { and, asc, eq, isNotNull, isNull } from 'drizzle-orm';
 import { resolveElement } from '@/core/elements';
+import { staminaCeiling } from '@/core/health';
 import { deriveStamina } from '@/core/stamina';
 import { getDb } from '../client';
 import { corrals, creatures, players, species } from '../schema';
@@ -27,6 +28,10 @@ export type PennedCreature = {
   maxStamina: number;
   /** True when it has enough stamina to be taken into a battle. */
   rested: boolean;
+  /** Enferma: la barra sube, pero con el techo bajo. Null es sana. */
+  sickSince: Date | null;
+  /** Lo que cuesta curarla de golpe, sin pasar por las misiones. */
+  curePrice: number;
   imageUrl: string | null;
 };
 
@@ -69,6 +74,7 @@ export async function getCorralShelf(playerId: string, now: Date): Promise<Corra
       lastFed: creatures.lastFed,
       isExcellent: creatures.isExcellent,
       corralId: creatures.corralId,
+      sickSince: creatures.sickSince,
       awakenedElement: creatures.element,
       speciesName: species.name,
       speciesElement: species.baseElement,
@@ -81,7 +87,13 @@ export async function getCorralShelf(playerId: string, now: Date): Promise<Corra
 
   /** Stamina is DERIVED for this render, never read from a column. */
   const toView = (row: (typeof rows)[number]): PennedCreature => {
-    const stamina = deriveStamina(row.lastFed, now, config.stamina);
+    const sick = row.sickSince !== null;
+    const stamina = deriveStamina(
+      row.lastFed,
+      now,
+      config.stamina,
+      staminaCeiling(sick, config.health, config.stamina),
+    );
     return {
       id: row.id,
       name: row.nickname ?? row.speciesName,
@@ -89,8 +101,11 @@ export async function getCorralShelf(playerId: string, now: Date): Promise<Corra
       element: resolveElement(row.speciesElement, row.awakenedElement),
       isExcellent: row.isExcellent,
       stamina: stamina.current,
-      maxStamina: config.stamina.maxStamina,
-      rested: stamina.current >= config.play.minStaminaToPlay,
+      /** El máximo que ESTA kriatura alcanza: su techo si está enferma. */
+      maxStamina: stamina.max,
+      rested: !sick && stamina.current >= config.play.minStaminaToPlay,
+      sickSince: row.sickSince,
+      curePrice: config.health.curePriceCoins,
       imageUrl: null,
     };
   };
@@ -258,4 +273,59 @@ export async function giveStarterCorral(playerId: string): Promise<void> {
     .update(creatures)
     .set({ corralId: home })
     .where(and(eq(creatures.playerId, playerId), isNull(creatures.corralId)));
+}
+
+export type CureFailure = 'not_yours' | 'not_sick' | 'not_enough_coins';
+
+/**
+ * LA CURA COMPRADA — la vía rápida.
+ *
+ * Quien tiene monedas paga y sigue jugando; quien no, conseguirá los
+ * ingredientes haciendo misiones. Que exista este camino es lo que hace
+ * aceptable que enfermar duela: el precio de la enfermedad son monedas, no
+ * días de tu vida esperando a terminar recados.
+ *
+ * Es el mismo principio que las baterías de las incubadoras — **las monedas
+ * compran tiempo, nunca perdón.**
+ */
+export async function cureCreature(
+  creatureId: string,
+  playerId: string,
+): Promise<{ ok: true; paid: number } | { ok: false; reason: CureFailure }> {
+  const db = await getDb();
+  const config = await loadGameConfig();
+  const price = config.health.curePriceCoins;
+
+  return db.transaction(async (tx) => {
+    const [mine] = await tx
+      .select({ id: creatures.id, sickSince: creatures.sickSince })
+      .from(creatures)
+      .where(and(eq(creatures.id, creatureId), eq(creatures.playerId, playerId)))
+      .limit(1);
+    if (!mine) return { ok: false as const, reason: 'not_yours' as const };
+    if (mine.sickSince === null) return { ok: false as const, reason: 'not_sick' as const };
+
+    const [player] = await tx.select().from(players).where(eq(players.id, playerId)).limit(1);
+    if (!player) return { ok: false as const, reason: 'not_yours' as const };
+    if (player.coins < price) {
+      return { ok: false as const, reason: 'not_enough_coins' as const };
+    }
+
+    await tx
+      .update(players)
+      .set({ coins: player.coins - price })
+      .where(eq(players.id, playerId));
+
+    /**
+     * Guarded by `sick_since IS NOT NULL` rather than by the read above: two
+     * cures bought at the same instant would both pass a check made in
+     * TypeScript, and the second must not charge for nothing.
+     */
+    await tx
+      .update(creatures)
+      .set({ sickSince: null })
+      .where(and(eq(creatures.id, creatureId), isNotNull(creatures.sickSince)));
+
+    return { ok: true as const, paid: price };
+  });
 }

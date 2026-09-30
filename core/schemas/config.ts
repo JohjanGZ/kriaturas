@@ -6,7 +6,7 @@ import { z } from 'zod';
  * schema registered for its key before it is used.
  */
 
-export const CONFIG_KEYS = ['stamina', 'play', 'combat', 'eggs', 'corrals'] as const;
+export const CONFIG_KEYS = ['stamina', 'play', 'combat', 'eggs', 'corrals', 'health'] as const;
 export type ConfigKey = (typeof CONFIG_KEYS)[number];
 export const configKeySchema = z.enum(CONFIG_KEYS);
 
@@ -58,6 +58,25 @@ export /**
  * Mismo molde que las incubadoras --uno gratis y los demás comprados-- porque
  * dos sistemas que se comportan igual son un sistema que aprender.
  */
+/**
+ * ENFERMAR. Los tres números que gobiernan el riesgo y lo que cuesta salir.
+ *
+ * `chanceAtEmptyPercent` es el pico, con la barra vacía; al 100% de stamina el
+ * riesgo es CERO, no un uno por ciento — un suelo haría que una kriatura pueda
+ * enfermar sin que pudieras haberlo evitado.
+ */
+const healthConfigSchema = z.strictObject({
+  chanceAtEmptyPercent: z.number().int().min(0).max(100).default(20),
+  /** Qué parte de la barra alcanza una kriatura enferma. */
+  sickCeilingPercent: z.number().int().min(1).max(100).default(25),
+  /**
+   * La cura comprada. La vía rápida: quien tiene monedas paga y sigue jugando;
+   * quien no, hará las misiones por los ingredientes. Las monedas compran
+   * TIEMPO, igual que las baterías de las incubadoras.
+   */
+  curePriceCoins: z.number().int().min(1).max(100_000).default(150),
+});
+
 const corralsConfigSchema = z.strictObject({
   /** Plazas del corral que se regala al empezar. */
   starterCapacity: z.number().int().min(1).max(100).default(10),
@@ -217,6 +236,7 @@ export const CONFIG_SCHEMAS = {
   combat: combatConfigSchema,
   eggs: eggsConfigSchema,
   corrals: corralsConfigSchema,
+  health: healthConfigSchema,
 } as const;
 
 export type StaminaConfig = z.infer<typeof staminaConfigSchema>;
@@ -224,6 +244,7 @@ export type PlayConfig = z.infer<typeof playConfigSchema>;
 export type CombatConfig = z.infer<typeof combatConfigSchema>;
 export type EggsConfig = z.infer<typeof eggsConfigSchema>;
 export type CorralsConfig = z.infer<typeof corralsConfigSchema>;
+export type HealthConfig = z.infer<typeof healthConfigSchema>;
 
 export type ConfigValue<K extends ConfigKey> = z.infer<(typeof CONFIG_SCHEMAS)[K]>;
 
@@ -268,6 +289,7 @@ export const DEFAULT_CONFIG: { [K in ConfigKey]: ConfigValue<K> } = {
     extraMoveMinRun: 4,
     extraMovesPerTurn: 1,
   },
+  health: { chanceAtEmptyPercent: 20, sickCeilingPercent: 25, curePriceCoins: 150 },
   corrals: {
     starterCapacity: 10,
     corralsForSale: [

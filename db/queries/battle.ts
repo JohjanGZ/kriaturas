@@ -19,6 +19,7 @@ import {
   applyRivalStrike,
   armField,
   canEvolveInBattle,
+  fallsIll,
   chooseBotMove,
   convertTiles,
   createPlayableBoard,
@@ -31,6 +32,7 @@ import {
   resolveTurn,
   rivalToEvolve,
   rollField,
+  shouldRollForIllness,
   startingMana,
   tileBag,
   tuneCombat,
@@ -59,6 +61,7 @@ import {
   type CombatConfig,
   type CorralsConfig,
   type EggsConfig,
+  type HealthConfig,
   type PlayConfig,
   parseConfig,
 } from "@/core/schemas/config";
@@ -96,6 +99,7 @@ export type LoadedConfig = {
   stamina: StaminaConfig;
   eggs: EggsConfig;
   corrals: CorralsConfig;
+  health: HealthConfig;
   gameId: string;
 };
 
@@ -125,6 +129,7 @@ export async function loadGameConfig(
     stamina: parseConfig("stamina", value("stamina")),
     eggs: parseConfig("eggs", value("eggs")),
     corrals: parseConfig("corrals", value("corrals")),
+    health: parseConfig("health", value("health")),
   };
 }
 
@@ -396,6 +401,7 @@ export type StartBattleFailure =
   | "battle_already_active"
   | "not_enough_stamina"
   | "creature_has_no_element"
+  | "creature_is_sick"
   | "duplicate_element"
   | "no_enemies_available";
 
@@ -449,6 +455,7 @@ export async function startBattle(
       manaCost: species.manaCost,
       speciesElement: species.baseElement,
       awakenedElement: creatures.element,
+      sickSince: creatures.sickSince,
     })
     .from(creatures)
     .innerJoin(species, eq(species.id, creatures.speciesId))
@@ -485,6 +492,24 @@ export async function startBattle(
    * what makes it true, because the client sends creature ids and a crafted
    * request would otherwise walk straight past the disabled buttons.
    */
+  /**
+   * UNA KRIATURA ENFERMA NO PELEA, y se dice aquí como todo lo demás: antes de
+   * gastar una sola gota de stamina.
+   *
+   * Podría dejarse entrar floja --el techo bajo ya la castiga-- pero entonces
+   * enfermar sería un número peor y no un acontecimiento. Que no pueda jugar es
+   * lo que hace que el jugador se acuerde de alimentarlas, y siempre hay salida:
+   * la cura se compra con monedas, o se fabrica con lo que den las misiones.
+   */
+  const ill = roster.find((row) => row.sickSince !== null);
+  if (ill) {
+    return {
+      ok: false,
+      reason: "creature_is_sick",
+      detail: "Está enferma. Cúrala en el corral antes de llevarla a pelear.",
+    };
+  }
+
   const repeated = firstDuplicateElement(
     roster.map((row) =>
       resolveElement(row.speciesElement, row.awakenedElement),
@@ -616,9 +641,41 @@ export async function startBattle(
       for (const [slot, entry] of spends.entries()) {
         if (!entry.spend.ok)
           throw new Error("stamina check changed mid-transaction");
+
+        /**
+         * EL DADO DE LA ENFERMEDAD, aquí y en ningún otro sitio.
+         *
+         * Se tira UNA vez: justo cuando esta partida deja a la kriatura por
+         * debajo de lo que hace falta para volver a jugar. Ese es el instante
+         * que el jugador provocó, y por eso la regla cabe en una frase — si la
+         * dejas seca, puede enfermar.
+         *
+         * Nunca lo dispara el paso del tiempo. La stamina solo baja jugando, y
+         * el modelo garantiza que la ausencia únicamente puede subirla: estar
+         * fuera una semana deja a las kriaturas MÁS seguras, no menos.
+         *
+         * La partida que acaba de empezar sigue adelante: ya está pagada. Lo
+         * que pesa es la siguiente.
+         */
+        const sick = shouldRollForIllness({
+          staminaAfter: entry.spend.staminaAfter,
+          minStaminaToPlay: config.play.minStaminaToPlay,
+          alreadySick: entry.row.sickSince !== null,
+        })
+          ? fallsIll(
+              entry.spend.staminaAfter,
+              config.health,
+              config.stamina.maxStamina,
+              Math.random,
+            )
+          : false;
+
         await tx
           .update(creatures)
-          .set({ lastFed: entry.spend.lastFed })
+          .set({
+            lastFed: entry.spend.lastFed,
+            ...(sick ? { sickSince: now } : {}),
+          })
           .where(eq(creatures.id, entry.row.id));
 
         /** The season's mana cost is copied in, so the bar cannot move mid-fight. */
