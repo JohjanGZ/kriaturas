@@ -6,7 +6,7 @@ import { z } from 'zod';
  * schema registered for its key before it is used.
  */
 
-export const CONFIG_KEYS = ['stamina', 'play', 'combat', 'eggs'] as const;
+export const CONFIG_KEYS = ['stamina', 'play', 'combat', 'eggs', 'corrals'] as const;
 export type ConfigKey = (typeof CONFIG_KEYS)[number];
 export const configKeySchema = z.enum(CONFIG_KEYS);
 
@@ -50,7 +50,32 @@ export const playConfigSchema = z.strictObject({
  * Eggs. Care is a server-side UTC calendar day; this offset lets the care day
  * start at something other than 00:00 UTC without ever asking the client.
  */
-export const eggsConfigSchema = z.strictObject({
+export /**
+ * EL CORRAL. La plaza es lo único que lo define, y ese número es el techo que
+ * al bucle de huevos le faltaba: sin él se incuba para siempre y las kriaturas
+ * se amontonan sin coste ninguno.
+ *
+ * Mismo molde que las incubadoras --uno gratis y los demás comprados-- porque
+ * dos sistemas que se comportan igual son un sistema que aprender.
+ */
+const corralsConfigSchema = z.strictObject({
+  /** Plazas del corral que se regala al empezar. */
+  starterCapacity: z.number().int().min(1).max(100).default(10),
+  corralsForSale: z
+    .array(
+      z.strictObject({
+        capacity: z.number().int().min(1).max(100),
+        priceCoins: z.number().int().min(1).max(100_000),
+      }),
+    )
+    .max(8)
+    .default([
+      { capacity: 10, priceCoins: 600 },
+      { capacity: 20, priceCoins: 2000 },
+    ]),
+});
+
+const eggsConfigSchema = z.strictObject({
   dayBoundaryUtcOffsetMinutes: z.number().int().min(0).max(1439),
   maxActiveEggsPerPlayer: z.number().int().min(1).max(100),
   /** Kept, unused: eggs no longer spoil. Being away never costs anything. */
@@ -191,12 +216,14 @@ export const CONFIG_SCHEMAS = {
   play: playConfigSchema,
   combat: combatConfigSchema,
   eggs: eggsConfigSchema,
+  corrals: corralsConfigSchema,
 } as const;
 
 export type StaminaConfig = z.infer<typeof staminaConfigSchema>;
 export type PlayConfig = z.infer<typeof playConfigSchema>;
 export type CombatConfig = z.infer<typeof combatConfigSchema>;
 export type EggsConfig = z.infer<typeof eggsConfigSchema>;
+export type CorralsConfig = z.infer<typeof corralsConfigSchema>;
 
 export type ConfigValue<K extends ConfigKey> = z.infer<(typeof CONFIG_SCHEMAS)[K]>;
 
@@ -240,6 +267,13 @@ export const DEFAULT_CONFIG: { [K in ConfigKey]: ConfigValue<K> } = {
     movesPerTurn: 2,
     extraMoveMinRun: 4,
     extraMovesPerTurn: 1,
+  },
+  corrals: {
+    starterCapacity: 10,
+    corralsForSale: [
+      { capacity: 10, priceCoins: 600 },
+      { capacity: 20, priceCoins: 2000 },
+    ],
   },
   eggs: {
     dayBoundaryUtcOffsetMinutes: 0,

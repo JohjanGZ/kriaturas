@@ -26,6 +26,8 @@ const REASONS: Record<string, string> = {
   already_done: 'Ese huevo ya tiene pagados todos sus días',
   battery_full: 'La batería está llena: espera a que pasen los días que ya pagaste',
   not_ready: 'Todavía le faltan días con energía',
+  no_room:
+    'No queda sitio en tus corrales. El huevo te espera listo: haz hueco o compra otro corral.',
   already_hatched: 'Ese huevo ya eclosionó',
   not_for_sale: 'Esa incubadora no está a la venta',
 };

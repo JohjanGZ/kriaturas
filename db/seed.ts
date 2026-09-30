@@ -11,6 +11,7 @@ import { parseEffectList } from '@/core/effects/schema';
 import { parseObjectiveParams } from '@/core/schemas/objectives';
 import { initialAnchor } from '@/core/stamina';
 import { type Db, createConnection } from './client';
+import { giveStarterCorral } from './queries/corral';
 import {
   creatures,
   eggTypeSpecies,
@@ -823,6 +824,19 @@ const FIELD_SEED: Record<string, { name: string; icon: string; rule: string }> =
  * background someone edited in the panel must survive it. The seed plants a
  * field; it does not keep overwriting one.
  */
+/**
+ * El corral que se regala, y adopta a las sueltas.
+ *
+ * Reutiliza `giveStarterCorral` en vez de escribir la fila aquí: las kriaturas
+ * que nacieron antes de que existieran los corrales tienen que acabar dentro de
+ * uno, y esa lógica ya vive en un sitio.
+ */
+async function seedCorral(db: Db, playerId: string): Promise<void> {
+  void db;
+  await giveStarterCorral(playerId);
+  console.log('  corral básico (y adopta a las kriaturas sueltas)');
+}
+
 async function seedFields(db: Db): Promise<void> {
   let planted = 0;
   for (const [kind, label] of Object.entries(FIELD_SEED)) {
@@ -850,6 +864,7 @@ async function main(): Promise<void> {
     await seedEggs(db, speciesIds);
     await seedStarterCreature(db, playerId, speciesIds, now);
     await seedIncubator(db, playerId);
+    await seedCorral(db, playerId);
     await seedFields(db);
     console.log('Seed complete.');
   } finally {

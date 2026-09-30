@@ -2,7 +2,7 @@ import { asc, eq } from 'drizzle-orm';
 import { DEFAULT_CONFIG } from '@/core/schemas/config';
 import { initialAnchor } from '@/core/stamina';
 import { getDb } from '../client';
-import { creatures, incubators, players, species, users } from '../schema';
+import { corrals, creatures, incubators, players, species, users } from '../schema';
 
 /**
  * A NEW PLAYER FROM NOTHING — what a hosted deploy needs and a seeded laptop
@@ -88,15 +88,22 @@ export async function createGuestPlayer(now: Date): Promise<GuestSession> {
           speciesId: starter.id,
           nickname: starter.name,
           isExcellent: index < 2,
+          corralId: home?.id ?? null,
           lastFed: anchor,
         })),
       );
     }
 
     /**
-     * The free incubator, given rather than bought: a player with none could
-     * buy an egg and have nowhere to put it.
+     * The corral its creatures live in, and the free incubator — both GIVEN,
+     * for the same reason: a player with neither could buy an egg and have
+     * nowhere to put it, nor anywhere for what hatches to live.
      */
+    const [home] = await tx
+      .insert(corrals)
+      .values({ playerId: player.id, name: 'Corral', capacity: 10, paidAmount: 0 })
+      .returning();
+
     await tx.insert(incubators).values({
       playerId: player.id,
       name: 'Incubadora básica',
@@ -109,6 +116,7 @@ export async function createGuestPlayer(now: Date): Promise<GuestSession> {
         playerId: player.id,
         speciesId: white.id,
         nickname: white.name,
+        corralId: home?.id ?? null,
         lastFed: anchor,
       });
     }

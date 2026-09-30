@@ -191,6 +191,54 @@ intense one without changing a rule.
 arrive while the player is still curious. It is the moment that decides whether this has
 progression or is only a series of battles.
 
+## El corral — where the kriaturas live
+
+`/corral` is the pen. `corrals` is a row per pen (capacity, price) and
+`creatures.corral_id` says which one a creature lives in — the same shape as the incubators,
+because two systems that behave alike are one system to learn.
+
+**Capacity is the point.** Until now a player could hatch for ever and the roster just grew. A
+ceiling turns "one more creature" into a decision and gives coins a second thing to buy.
+
+- **A full corral REFUSES the newborn; it never makes room.** A ready egg stays exactly as it
+  is — powered, paid for, waiting in its incubator — until there is a place. Nothing is deleted,
+  ever. "One of yours died because you ran out of space" is what makes somebody close a game for
+  good, and no rule in this project is allowed to produce that sentence.
+- **The two capacities are SEPARATE.** An egg occupies an incubator slot while it incubates; a
+  creature occupies a corral place once it hatches. Neither counts against the other.
+- **Over capacity is possible and harmless.** Nothing evicts: the limit only refuses ARRIVALS, so
+  a corral shrunk in config just stops accepting.
+- **Creatures with no corral are adopted on sight.** Anything born before corrals existed gets a
+  place when the page loads, rather than needing a data migration nobody remembers to run.
+
+### A still image that walks
+
+The creatures will be fixed artwork, so the animation is not of the DRAWING — it is of its
+PLACE. Three things make one frame stroll convincingly:
+
+1. a slow drift from one side of the pen to the other,
+2. a short bob up and down — the breathing,
+3. and the **horizontal flip at each end**, which is what actually sells it. Without it the
+   creature looks dragged backwards for half of every round trip.
+
+Each one starts at its own point in the cycle with its own duration, derived from **its id** —
+stable across renders, so a creature never jumps somewhere else when the page redraws, and they
+do not all move in unison like a chorus.
+
+A **tired** creature stops moving and desaturates: something is wrong with it, readable without
+finding a number. Under `prefers-reduced-motion` they walk far slower and stop bobbing — reduce
+asks for less movement, and a pen with nothing moving in it stops reading as a place where
+animals live.
+
+**Selecting one opens the care card**, docked at the bottom rather than floating over the pen:
+a popover would cover exactly what you just tapped, and on a phone the thumb is already in that
+half of the screen.
+
+> **Never call a helper that opens its own connection inside a transaction.** `hatchEgg` asked
+> `corralWithRoom` for a place from inside `db.transaction`, and PGlite — one process — simply
+> hung. Even where it would not, the check would be reading outside the transaction it exists to
+> guard. Inside a `tx`, query with that `tx`.
+
 ## Match-3 engine
 
 `core/match3` holds the whole turn as pure functions: `createPlayableBoard`, `findRuns`,

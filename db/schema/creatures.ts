@@ -1,6 +1,7 @@
 import { sql } from 'drizzle-orm';
 import { boolean, check, index, pgTable, text, uuid } from 'drizzle-orm/pg-core';
 import { timestamps, tstz } from './_shared';
+import { corrals } from './corrals';
 import { elementEnum } from './enums';
 import { evolutionPaths } from './evolution';
 import { players } from './players';
@@ -49,6 +50,19 @@ export const creatures = pgTable(
     nickname: text('nickname'),
 
     /**
+     * WHICH CORRAL IT LIVES IN. Null means it is loose — possible for creatures
+     * born before corrals existed, and the roster still shows them.
+     *
+     * `set null` on delete rather than cascade: losing a corral must never take
+     * the creatures inside it with it. Nothing in this game deletes a kriatura
+     * as a side effect of anything.
+     */
+    corralId: uuid('corral_id').references(() => corrals.id, {
+      onDelete: 'set null',
+      onUpdate: 'cascade',
+    }),
+
+    /**
      * THE ELEMENT A STONE GAVE IT. Null for every ordinary creature, whose
      * element comes from its species.
      *
@@ -87,6 +101,7 @@ export const creatures = pgTable(
   },
   (t) => [
     index('creatures_player_id_idx').on(t.playerId),
+    index('creatures_corral_idx').on(t.corralId),
     index('creatures_species_id_idx').on(t.speciesId),
     index('creatures_evolution_path_idx').on(t.evolutionPathId),
     check(

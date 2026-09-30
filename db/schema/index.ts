@@ -5,6 +5,7 @@ export * from './fields';
 export * from './species';
 export * from './evolution';
 export * from './objectives';
+export * from './corrals';
 export * from './creatures';
 export * from './eggs';
 export * from './battles';

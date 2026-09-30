@@ -11,6 +11,7 @@ import {
 import { initialAnchor } from '@/core/stamina';
 import { getDb } from '../client';
 import {
+  corrals,
   creatures,
   eggCareLog,
   eggTypeSpecies,
@@ -386,7 +387,7 @@ export async function powerEgg(
   });
 }
 
-export type HatchFailure = 'egg_not_found' | 'not_ready' | 'already_hatched';
+export type HatchFailure = 'egg_not_found' | 'not_ready' | 'already_hatched' | 'no_room';
 
 /**
  * Hatches the egg into a creature. Two tables, so one transaction: an egg that
@@ -440,6 +441,34 @@ export async function hatchEgg(
     }
 
     /**
+     * A FULL CORRAL REFUSES THE NEWBORN — it never makes room by itself.
+     *
+     * The egg stays exactly as it is: powered, paid for and ready, waiting for
+     * a place. Nothing is lost and nothing is deleted, which is the whole rule:
+     * "one of yours died because you ran out of space" is what makes somebody
+     * close a game for good.
+     *
+     * Queried with `tx` and not through `corralWithRoom`: a helper that opens
+     * its own connection INSIDE an open transaction deadlocks PGlite, which is
+     * a single process — and even where it does not, the check would be reading
+     * outside the transaction it is supposed to guard.
+     */
+    const pens = await tx
+      .select()
+      .from(corrals)
+      .where(eq(corrals.playerId, playerId))
+      .orderBy(asc(corrals.createdAt));
+    const living = await tx
+      .select({ id: creatures.id, corralId: creatures.corralId })
+      .from(creatures)
+      .where(eq(creatures.playerId, playerId));
+
+    const home =
+      pens.find((pen) => living.filter((one) => one.corralId === pen.id).length < pen.capacity)
+        ?.id ?? null;
+    if (!home) return { ok: false as const, reason: 'no_room' as const };
+
+    /**
      * Born rested, like the seeded starters: `initialAnchor` rather than the
      * column default, which would hatch it with zero stamina and nothing to do.
      */
@@ -448,6 +477,7 @@ export async function hatchEgg(
       .values({
         playerId,
         speciesId: row.speciesId,
+        corralId: home,
         lastFed: initialAnchor(now, config.stamina),
       })
       .returning();
