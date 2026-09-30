@@ -77,6 +77,27 @@ Cada `git push` a `main` despliega solo. Tarda un par de minutos, así que para 
 sigue siendo mejor el portátil; el servidor es para probar en el móvil de verdad y para
 enseñarlo.
 
+## Por qué hay un `vercel.json`
+
+Vercel decide qué framework tiene un proyecto **una sola vez, al crearlo**, mirando lo que haya
+en el repositorio en ese momento. Si el proyecto se conecta antes de que el código esté subido
+—cuando el repo solo tiene el README que crea GitLab, por ejemplo— no encuentra `package.json`,
+lo clasifica como sitio estático y **no vuelve a mirarlo nunca**.
+
+El síntoma es desconcertante, porque el build sale VERDE: corre, compila, y luego Vercel se
+queda solo con `public/`. Se reconoce así:
+
+```
+/sw.js                 200   <- está en public/
+/brand/logo-mark.png   200   <- está en public/
+/icon.png              404   <- lo genera Next
+/_next/static/...      404   <- lo genera Next
+/  /entrar  /jugar     404   <- no hay ni una ruta
+```
+
+`vercel.json` lo fija desde el repositorio, que es donde debe estar: así no depende de un ajuste
+del panel que nadie recuerda haber tocado, y un proyecto nuevo creado desde este repo nace bien.
+
 ## Cuidado con esto
 
 - **`ALLOW_ADMIN_ENTRY` le da el panel a quien pulse el botón.** No hay login: cualquiera con el
