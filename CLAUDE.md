@@ -337,6 +337,23 @@ The lineup that is playing is lit and the other dims (`.arena-active`), and the 
 your turn are **pips, not a fraction** — how many moves you have should be countable at a
 glance, since that is the number every decision hangs on.
 
+#### The battle has to FIT, on a phone, without scrolling
+
+Having to scroll up to see your health turns every move into two gestures, and health is exactly
+what you look at after playing. So everything above the board earns its height or loses it:
+
+- **The pips live ON the board** (`.board-moves`, top right), not in the HUD. In the middle of a
+  row shared with two life totals they made it wrap on a narrow screen, which pushed the board —
+  and the health bars — below the fold. There they cost no height at all and sit where the eye
+  already is.
+- **The turn NUMBER is gone.** Nothing is decided with it. The pips are the only number in that
+  row anybody acts on.
+- **"Juega el rival" is said once**, by the lock pill on the board. The HUD used to say it too.
+- **No `<h1>` during a battle.** A board with two lineups over it does not need a caption.
+- **The field's rule is one line, clipped** (`.field-rule`), with the full text in `title`. It
+  matters on the first move and is noise afterwards; wrapped, it took three lines of a phone.
+- Under `max-height: 760px` the gaps, the arena padding and the drag hint shrink or go.
+
 #### The bars are paced by the REPLAY, not by the server
 
 One request resolves your move **and** the bot's answer, so the page re-renders with the final

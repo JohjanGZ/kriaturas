@@ -66,7 +66,6 @@ export default async function PlayPage() {
     const finished = active.status !== 'active';
     return (
       <main className="shell">
-        <h1>Combate</h1>
         <BattleBoard
           battleId={active.id}
           board={active.board}

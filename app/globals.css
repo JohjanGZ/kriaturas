@@ -355,6 +355,32 @@ th {
   margin: 0 auto;
 }
 
+/*
+ * EL COMBATE TIENE QUE CABER DE UNA VEZ.
+ *
+ * Tener que desplazarse para ver la vida convierte cada movimiento en dos
+ * gestos, y la vida es justo lo que se mira despues de jugar. En pantallas
+ * bajas se recorta todo lo que no es informacion: el aire entre bloques, el
+ * relleno de la arena y el consejo de como arrastrar.
+ */
+@media (max-height: 760px) {
+  .battle {
+    gap: 0.4rem;
+  }
+
+  .arena {
+    padding: 0.5rem 0.5rem;
+  }
+
+  .arena-team {
+    gap: 0.5rem;
+  }
+
+  .board-hint {
+    display: none;
+  }
+}
+
 .hud {
   display: flex;
   align-items: center;
@@ -724,12 +750,25 @@ th {
   font-weight: 700;
 }
 
-/* How many moves are left, countable at a glance. */
-.moves-pips {
+/*
+ * How many moves are left, countable at a glance — ON the board.
+ *
+ * It used to sit in the middle of the HUD, between the two lives. On a phone
+ * that row wrapped and pushed the board off the screen, and the health bars
+ * ended up above the fold. Here it costs no height at all and sits where the
+ * eye already is.
+ */
+.board-moves {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  z-index: 5;
   display: inline-flex;
-  gap: 4px;
-  margin-left: 0.4rem;
-  vertical-align: middle;
+  gap: 5px;
+  padding: 4px 7px;
+  border-radius: 999px;
+  background: rgb(12 10 18 / 0.55);
+  pointer-events: none;
 }
 
 .pip {
@@ -1237,13 +1276,30 @@ th {
   display: flex;
   align-items: baseline;
   gap: 0.45rem;
-  flex-wrap: wrap;
-  margin: 0 0 0.5rem;
-  padding: 0.45rem 0.7rem;
+  /*
+   * UNA SOLA LINEA. Envuelto, el texto de la regla se comia tres lineas en un
+   * movil y empujaba el tablero fuera de la pantalla. La regla importa en el
+   * primer movimiento y despues es ruido, asi que se recorta con puntos
+   * suspensivos y queda entera en el `title` y en pantallas anchas.
+   */
+  flex-wrap: nowrap;
+  overflow: hidden;
+  margin: 0 0 0.4rem;
+  padding: 0.35rem 0.6rem;
   border: 1px solid var(--line);
   border-left: 3px solid var(--mana);
   border-radius: 8px;
   background: color-mix(in srgb, var(--mana) 7%, transparent);
+}
+
+.field-rule {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  font-size: 0.8rem;
+  color: var(--muted);
 }
 
 .field-icon {

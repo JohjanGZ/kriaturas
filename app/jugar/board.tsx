@@ -696,7 +696,7 @@ export function BattleBoard({
    */
   const won = status === 'won';
   const showResult = finished && status !== 'abandoned' && !replaying && !rivalPlaying;
-  /** The HUD counts the turn in progress as `turn + 1`; the result must agree. */
+  /** `turn` counts the turns FINISHED, so the one being played is the next. */
   const turnsPlayed = turn + 1;
 
   /**
@@ -834,21 +834,6 @@ export function BattleBoard({
           {shown.opponentShield > 0 ? (
             <span className="hud-shield"> 🛡 {shown.opponentShield}</span>
           ) : null}
-        </span>
-        <span className={`hud-turn${rivalPlaying ? ' hud-turn-foe' : ''}`}>
-          {rivalPlaying ? (
-            'juega el rival…'
-          ) : (
-            <>
-              turno {turn + 1}
-              {/* Pips, not a fraction: how many moves are left should be countable at a glance. */}
-              <span className="moves-pips" aria-label={`te quedan ${movesLeft} jugadas`}>
-                {Array.from({ length: Math.max(movesPerTurn, movesLeft) }, (_, index) => (
-                  <span key={index} className={`pip${index < movesLeft ? ' pip-on' : ''}`} />
-                ))}
-              </span>
-            </>
-          )}
         </span>
         <span className="hud-side hud-right">
           {shown.playerHp}/{playerMaxHp} <span className="hud-heart">❤</span>
@@ -1011,12 +996,12 @@ export function BattleBoard({
        * and "why did the board just shuffle" must never be a question.
        */}
       {fieldLabel ? (
-        <p className="field-tag">
+        <p className="field-tag" title={fieldLabel.rule}>
           <span className="field-icon" aria-hidden="true">
             {fieldLabel.icon}
           </span>
           <strong>{fieldLabel.name}</strong>
-          <span className="small muted"> {fieldLabel.rule}</span>
+          <span className="field-rule">{fieldLabel.rule}</span>
         </p>
       ) : null}
 
@@ -1097,6 +1082,26 @@ export function BattleBoard({
               {bomb.fuse}
             </span>
           ))}
+
+          {/*
+            * LAS JUGADAS QUE TE QUEDAN, encima del tablero y no en la cabecera.
+            *
+            * Es el unico numero de la cabecera sobre el que se decide algo, y
+            * estaba compartiendo fila con las dos vidas: en un movil esa fila
+            * se partia en dos y empujaba el tablero fuera de la pantalla. Aqui
+            * no ocupa altura, y ademas esta donde se mira.
+            *
+            * El numero de turno se fue del todo: no se decide nada con el. Y
+            * "juega el rival" ya lo dice la pastilla con el candado, asi que
+            * decirlo dos veces solo costaba sitio.
+            */}
+          {rivalPlaying ? null : (
+            <span className="board-moves" aria-label={`te quedan ${movesLeft} jugadas`}>
+              {Array.from({ length: Math.max(movesPerTurn, movesLeft) }, (_, index) => (
+                <span key={index} className={`pip${index < movesLeft ? ' pip-on' : ''}`} />
+              ))}
+            </span>
+          )}
 
           {blast.map((cell) => (
             <span
