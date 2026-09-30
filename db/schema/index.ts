@@ -9,3 +9,4 @@ export * from './eggs';
 export * from './battles';
 export * from './games';
 export * from './relations';
+export * from './seasons';

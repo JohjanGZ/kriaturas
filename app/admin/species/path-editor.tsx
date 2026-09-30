@@ -2,13 +2,16 @@
 
 import { useActionState } from 'react';
 import { useFormStatus } from 'react-dom';
+import type { Effect } from '@/core/effects/schema';
 import { EVOLVED_ELEMENTS, type EvolvedElement } from '@/core/elements';
 import {
   type ActionState,
   createPathAction,
   deletePathAction,
   setDefaultPathAction,
+  updatePathAction,
 } from './actions';
+import { EffectsEditor } from './effects-editor';
 import { ImageField } from './image-field';
 
 /**
@@ -27,6 +30,9 @@ export type PathView = {
   hpBonus: number;
   attackBonus: number;
   defenseBonus: number;
+  description: string | null;
+  sortOrder: number;
+  effects: readonly Effect[];
   imageUrl: string | null;
   creatureCount: number;
 };
@@ -37,6 +43,83 @@ function Pending({ label }: { label: string }) {
     <button type="submit" disabled={pending}>
       {pending ? '…' : label}
     </button>
+  );
+}
+
+/**
+ * Editing a path IN PLACE, powers included.
+ *
+ * It has to be editable rather than replaceable: a path a creature already
+ * locked in cannot be deleted, so "delete and re-add" is not a way to retune the
+ * transformed form. The element it points at stays fixed, like the species' base
+ * element, because the grade of the path is DERIVED from that target.
+ */
+function PathEditForm({ path, speciesId }: { path: PathView; speciesId: string }) {
+  const [state, save] = useActionState(updatePathAction, { ok: false } satisfies ActionState);
+
+  return (
+    <form action={save}>
+      <input type="hidden" name="pathId" value={path.id} />
+      <input type="hidden" name="speciesId" value={speciesId} />
+
+      {state.message ? (
+        <p className={`notice ${state.ok ? 'notice-ok' : 'notice-error'}`}>{state.message}</p>
+      ) : null}
+
+      <div className="row">
+        <div className="field" style={{ flex: '1 1 220px' }}>
+          <label htmlFor={`name-${path.id}`}>Nombre de la vía</label>
+          <input id={`name-${path.id}`} name="name" type="text" defaultValue={path.name} required />
+        </div>
+        <div className="field" style={{ flex: '0 0 110px' }}>
+          <label htmlFor={`sort-${path.id}`}>Orden</label>
+          <input
+            id={`sort-${path.id}`}
+            name="sortOrder"
+            type="number"
+            min={0}
+            defaultValue={path.sortOrder}
+          />
+        </div>
+      </div>
+
+      <div className="row">
+        {(
+          [
+            ['hpBonus', 'Bonus HP', path.hpBonus],
+            ['attackBonus', 'Bonus ataque', path.attackBonus],
+            ['defenseBonus', 'Bonus defensa', path.defenseBonus],
+          ] as const
+        ).map(([field, label, current]) => (
+          <div className="field" key={field} style={{ flex: '1 1 140px' }}>
+            <label htmlFor={`${field}-${path.id}`}>{label}</label>
+            <input
+              id={`${field}-${path.id}`}
+              name={field}
+              type="number"
+              min={0}
+              defaultValue={current}
+            />
+          </div>
+        ))}
+      </div>
+
+      <div className="field">
+        <label htmlFor={`desc-${path.id}`}>Descripción</label>
+        <textarea id={`desc-${path.id}`} name="description" defaultValue={path.description ?? ''} />
+      </div>
+
+      <ImageField name="image" label="Imagen de la forma transformada" currentUrl={path.imageUrl} />
+
+      <EffectsEditor
+        name="effects"
+        initial={path.effects}
+        title="Poderes de esta vía"
+        hint="Se suman a los de la especie cuando la kriatura se transforma en la partida. Aquí es donde una vía potencia la habilidad en vez de solo subir números."
+      />
+
+      <Pending label="Guardar vía" />
+    </form>
   );
 }
 
@@ -51,6 +134,7 @@ function PathRow({ path, speciesId }: { path: PathView; speciesId: string }) {
   const locked = path.creatureCount > 0;
 
   return (
+    <>
     <tr>
       <td>
         <strong>{path.targetElement}</strong>
@@ -84,6 +168,17 @@ function PathRow({ path, speciesId }: { path: PathView; speciesId: string }) {
         </form>
       </td>
     </tr>
+    <tr>
+      <td colSpan={4}>
+        <details>
+          <summary className="small">
+            Editar «{path.name}» · {path.effects.length} poder(es)
+          </summary>
+          <PathEditForm path={path} speciesId={speciesId} />
+        </details>
+      </td>
+    </tr>
+    </>
   );
 }
 
@@ -185,6 +280,13 @@ export function PathEditor({
           </div>
 
           <ImageField name="image" label="Imagen de la forma evolucionada" />
+
+          <EffectsEditor
+            name="effects"
+            initial={[]}
+            title="Poderes de la vía"
+            hint="Los que se suman al transformarse. Se pueden cambiar después sin borrar la vía."
+          />
 
           <Pending label="Añadir vía" />
         </form>

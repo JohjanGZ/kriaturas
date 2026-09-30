@@ -157,6 +157,7 @@ export const TILE_LETTERS = {
   p: 'plant',
   s: 'psychic',
   o: 'food',
+  d: 'drakofruta',
 } as const satisfies Record<string, BoardTileKind>;
 
 const LETTER_OF: Record<BoardTileKind, string> = {
@@ -165,6 +166,7 @@ const LETTER_OF: Record<BoardTileKind, string> = {
   plant: 'p',
   psychic: 's',
   food: 'o',
+  drakofruta: 'd',
 };
 
 /**
@@ -214,6 +216,7 @@ export function tileCounts(board: Board): Record<BoardTileKind, number> {
     plant: 0,
     psychic: 0,
     food: 0,
+    drakofruta: 0,
   };
   for (const tile of board.tiles) counts[tile] += 1;
   return counts;

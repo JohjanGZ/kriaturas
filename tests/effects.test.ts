@@ -2,7 +2,16 @@ import { describe, expect, it } from 'vitest';
 import { type Effect, effectListSchema, parseEffectList } from '@/core/effects/schema';
 import { type EffectContext, conditionHolds, resolveEffects } from '@/core/effects/resolve';
 
-const context: EffectContext = { enemyElement: 'plant', comboLength: 4, selfEvolved: false };
+const context: EffectContext = {
+  enemyElements: ['plant'],
+  comboLength: 4,
+  gemsCleared: 4,
+  selfEvolved: false,
+  selfHealthPercent: 100,
+  enemyHealthPercent: 100,
+  fruits: 0,
+  turn: 1,
+};
 
 describe('conditionHolds', () => {
   it('holds when there is no condition at all', () => {
@@ -25,13 +34,15 @@ describe('conditionHolds', () => {
 });
 
 describe('resolveEffects', () => {
-  it('sums damage and reports what was applied', () => {
+  it('sums PIERCING damage and reports what was applied', () => {
     const effects: Effect[] = [
       { type: 'damage', target: 'enemy', value: 20 },
       { type: 'damage', target: 'enemy', value: 5 },
     ];
     const resolved = resolveEffects(effects, context);
-    expect(resolved.damage).toBe(25);
+    /** `damage` is the piercing channel: no shield, no block. */
+    expect(resolved.pierceDamage).toBe(25);
+    expect(resolved.damage).toBe(0);
     expect(resolved.applied).toHaveLength(2);
     expect(resolved.skipped).toHaveLength(0);
   });
@@ -44,7 +55,7 @@ describe('resolveEffects', () => {
       condition: { enemy_element: 'plant' },
     };
     expect(resolveEffects([effect], context).damage).toBe(30);
-    const missed = resolveEffects([effect], { ...context, enemyElement: 'fire' });
+    const missed = resolveEffects([effect], { ...context, enemyElements: ['fire'] });
     expect(missed.damage).toBe(0);
     expect(missed.skipped).toHaveLength(1);
   });
@@ -57,8 +68,8 @@ describe('resolveEffects', () => {
       value: 50,
       condition: { min_combo: 4 },
     };
-    expect(resolveEffects([damage, bonus], context).damage).toBe(150);
-    expect(resolveEffects([bonus, damage], context).damage).toBe(150);
+    expect(resolveEffects([damage, bonus], context).pierceDamage).toBe(150);
+    expect(resolveEffects([bonus, damage], context).pierceDamage).toBe(150);
   });
 
   it('ignores the combo bonus when the combo is too short', () => {
@@ -66,7 +77,7 @@ describe('resolveEffects', () => {
       { type: 'damage', target: 'enemy', value: 100 },
       { type: 'combo_bonus', target: 'self', value: 50, condition: { min_combo: 5 } },
     ];
-    expect(resolveEffects(effects, context).damage).toBe(100);
+    expect(resolveEffects(effects, context).pierceDamage).toBe(100);
   });
 
   it('collects heal and shield separately from damage', () => {
@@ -80,6 +91,7 @@ describe('resolveEffects', () => {
     expect(resolved.shield).toBe(12);
     expect(resolved.shieldTurns).toBe(3);
     expect(resolved.damage).toBe(0);
+    expect(resolved.pierceDamage).toBe(0);
   });
 
   it('resolves an empty list to nothing rather than throwing', () => {

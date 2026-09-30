@@ -1,0 +1,3 @@
+ALTER TABLE "evolution_paths" DROP CONSTRAINT "evolution_paths_target_is_evolved";--> statement-breakpoint
+ALTER TABLE "creatures" ADD COLUMN "is_excellent" boolean DEFAULT false NOT NULL;--> statement-breakpoint
+ALTER TABLE "evolution_paths" ADD CONSTRAINT "evolution_paths_target_is_element" CHECK ("evolution_paths"."target_element" in ('fire', 'water', 'plant', 'psychic', 'light', 'ice', 'poison', 'astral', 'rock'));

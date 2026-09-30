@@ -7,6 +7,7 @@ import { requireAdminPage } from '@/lib/auth';
 import { imageStorage } from '@/lib/storage';
 import { updateSpeciesAction } from '../actions';
 import { DeleteSpecies } from '../delete-species';
+import { type FormView, FormEditor } from '../form-editor';
 import { type PathView, PathEditor } from '../path-editor';
 import { SpeciesForm } from '../species-form';
 
@@ -32,6 +33,9 @@ export default async function EditSpeciesPage({
       hpBonus: path.hpBonus,
       attackBonus: path.attackBonus,
       defenseBonus: path.defenseBonus,
+      description: path.description,
+      sortOrder: path.sortOrder,
+      effects: path.effects,
       imageUrl: path.imagePath ? storage.urlFor(path.imagePath) : null,
       creatureCount: await creaturesOnPath(path.id),
     })),
@@ -45,7 +49,9 @@ export default async function EditSpeciesPage({
 
       <div className="row" style={{ justifyContent: 'space-between' }}>
         <h1>{species.name}</h1>
-        <span className={`tag tag-${species.baseElement}`}>{species.baseElement}</span>
+        <span className={`tag tag-${species.baseElement ?? 'none'}`}>
+          {species.baseElement ?? 'sin elemento'}
+        </span>
       </div>
 
       <SpeciesForm
@@ -55,7 +61,7 @@ export default async function EditSpeciesPage({
           id: species.id,
           name: species.name,
           slug: species.slug,
-          baseElement: species.baseElement as BaseElement,
+          baseElement: species.baseElement as BaseElement | null,
           baseImageUrl: species.baseImagePath ? storage.urlFor(species.baseImagePath) : null,
           baseHp: species.baseHp,
           baseAttack: species.baseAttack,
@@ -63,8 +69,24 @@ export default async function EditSpeciesPage({
           manaCost: species.manaCost,
           description: species.description,
           isPublished: species.isPublished,
+          effects: species.effects,
         }}
       />
+
+      {/* Only a species with no element of its own has faces to author. */}
+      {species.baseElement === null ? (
+        <FormEditor
+          speciesId={species.id}
+          speciesName={species.name}
+          forms={species.forms.map(
+            (form): FormView => ({
+              element: form.element as BaseElement,
+              name: form.name,
+              imageUrl: form.imagePath ? storage.urlFor(form.imagePath) : null,
+            }),
+          )}
+        />
+      ) : null}
 
       <PathEditor speciesId={species.id} paths={paths} />
 

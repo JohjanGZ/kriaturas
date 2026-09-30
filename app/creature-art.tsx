@@ -13,14 +13,64 @@ import type { CSSProperties } from 'react';
  * real artwork is shown instead.
  */
 
-export type ArtElement = 'fire' | 'water' | 'plant' | 'psychic';
+/**
+ * Evolved elements are drawn too: an evolution that did not CHANGE THE ANIMAL
+ * would be a number going up, and the whole ceremony would land on nothing.
+ */
+export type ArtElement =
+  /**
+   * WHITE — a creature with no element yet. It is not a colour choice: it is
+   * the mechanic made visible, an animal that has not decided what it is. It
+   * gets no crown for the same reason, so at a glance it reads as unfinished
+   * rather than as a pale version of something.
+   */
+  | 'none'
+  | 'fire'
+  | 'water'
+  | 'plant'
+  | 'psychic'
+  | 'light'
+  | 'ice'
+  | 'poison'
+  | 'astral'
+  | 'rock';
 
 const PALETTES: Record<ArtElement, { body: string; belly: string; dark: string; crown: string }> = {
+  none: { body: '#f3f4f8', belly: '#ffffff', dark: '#b9bdcc', crown: '#e7e9f2' },
   fire: { body: '#ff8a3d', belly: '#ffd7b0', dark: '#b3480f', crown: '#ffb638' },
   water: { body: '#3d9bff', belly: '#cfe8ff', dark: '#17558f', crown: '#8ad8ff' },
   plant: { body: '#4fc44f', belly: '#dbf5d3', dark: '#256d2a', crown: '#8ee06a' },
   psychic: { body: '#a86ce0', belly: '#eadbfa', dark: '#5f3392', crown: '#f0a8e8' },
+
+  /** Brighter, colder or darker than the base they came from — never the same. */
+  light: { body: '#ffd85e', belly: '#fff6d4', dark: '#c98a00', crown: '#fffbe6' },
+  ice: { body: '#7fe3ff', belly: '#e6fbff', dark: '#1f7fa3', crown: '#ffffff' },
+  poison: { body: '#a557d6', belly: '#e9d2f7', dark: '#4d1f6b', crown: '#c8ff4d' },
+  astral: { body: '#6f7bff', belly: '#dfe2ff', dark: '#2a2f8c', crown: '#ffd6f7' },
+  rock: { body: '#a9906f', belly: '#e6dbc8', dark: '#5c4a33', crown: '#cbbba1' },
 };
+
+/** Which base silhouette an evolved element keeps: the animal is still itself. */
+const CROWN_OF: Record<ArtElement, 'fire' | 'water' | 'plant' | 'psychic' | 'none'> = {
+  none: 'none',
+  fire: 'fire',
+  water: 'water',
+  plant: 'plant',
+  psychic: 'psychic',
+  light: 'fire',
+  ice: 'water',
+  poison: 'plant',
+  astral: 'psychic',
+  rock: 'plant',
+};
+
+const EVOLVED: ReadonlySet<ArtElement> = new Set<ArtElement>([
+  'light',
+  'ice',
+  'poison',
+  'astral',
+  'rock',
+]);
 
 /** Stable pseudo-random from the name, so a creature never changes look. */
 function hash(value: string): number {
@@ -29,8 +79,17 @@ function hash(value: string): number {
   return total;
 }
 
-function Crown({ element, color }: { element: ArtElement; color: string }) {
+function Crown({
+  element,
+  color,
+}: {
+  element: 'fire' | 'water' | 'plant' | 'psychic' | 'none';
+  color: string;
+}) {
   switch (element) {
+    /** No element, no crown: the shape itself says "not decided yet". */
+    case 'none':
+      return null;
     case 'fire':
       return <path d="M50 8c7 10 3 15 8 19-9 3-20 2-25-4 6-1 9-6 17-15z" fill={color} />;
     case 'water':
@@ -63,7 +122,7 @@ export function CreatureArt({
   className?: string;
   style?: CSSProperties;
 }) {
-  const palette = PALETTES[element];
+  const palette = PALETTES[element] ?? PALETTES.none;
   const seed = hash(name);
 
   /** Small, stable variations so the roster does not look cloned. */
@@ -84,7 +143,21 @@ export function CreatureArt({
 
       <ellipse cx="50" cy="90" rx="26" ry="5" fill="#000" opacity="0.18" />
 
-      <Crown element={element} color={palette.crown} />
+      {/* An evolved creature wears a halo: the silhouette alone is too subtle. */}
+      {EVOLVED.has(element) ? (
+        <circle
+          cx="50"
+          cy="58"
+          r="40"
+          fill="none"
+          stroke={palette.crown}
+          strokeWidth="2"
+          opacity="0.55"
+          strokeDasharray="6 7"
+        />
+      ) : null}
+
+      <Crown element={CROWN_OF[element]} color={palette.crown} />
 
       {/* body */}
       <ellipse cx="50" cy="60" rx={bodyWidth} ry="28" fill={`url(#${gradientId})`} />

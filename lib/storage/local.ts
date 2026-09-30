@@ -49,8 +49,25 @@ export class LocalImageStorage implements ImageStorage {
     const key = `${prefix}/${randomUUID()}${extension}`;
 
     const target = path.join(this.root, key);
-    await mkdir(path.dirname(target), { recursive: true });
-    await writeFile(target, bytes);
+    try {
+      await mkdir(path.dirname(target), { recursive: true });
+      await writeFile(target, bytes);
+    } catch (error) {
+      /**
+       * A HOSTED SERVER HAS NO WRITABLE DISK, and the raw EROFS/EACCES reaches
+       * the admin as "algo falló al guardar" — which sends whoever sees it
+       * looking for a bug in the form. Say what is actually true instead: this
+       * adapter is for a laptop, and uploads need the R2 adapter up there.
+       */
+      const code = (error as { code?: string }).code;
+      if (code === 'EROFS' || code === 'EACCES' || code === 'EPERM') {
+        throw new Error(
+          'Este servidor no tiene disco donde escribir, así que no se pueden subir imágenes. ' +
+            'Súbelas en local, o configura el almacenamiento remoto (R2).',
+        );
+      }
+      throw error;
+    }
 
     return {
       key,

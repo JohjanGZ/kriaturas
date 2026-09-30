@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { EVOLVED_ELEMENTS } from '@/core/elements';
 import {
   BOARD_TILE_KINDS,
+  tileBag,
   type Board,
   areAdjacent,
   createBoard,
@@ -135,7 +136,7 @@ describe('createBoard', () => {
     }
   });
 
-  it('only uses the five board tiles — no evolved element, no drakofruta', () => {
+  it('only uses the six board tiles, and never an evolved element', () => {
     const board = createBoard(options, seeded(7));
     for (const tile of board.tiles) {
       expect(BOARD_TILE_KINDS).toContain(tile);
@@ -143,7 +144,6 @@ describe('createBoard', () => {
     for (const evolved of EVOLVED_ELEMENTS) {
       expect(board.tiles).not.toContain(evolved);
     }
-    expect(board.tiles).not.toContain('drakofruta');
   });
 
   it('fills every cell', () => {
@@ -218,5 +218,24 @@ describe('hasValidMove', () => {
       expect(findRuns(board, 3)).toHaveLength(0);
       expect(hasValidMove(board, 3)).toBe(true);
     }
+  });
+});
+
+describe('tileBag — the fruit is the rare one', () => {
+  const weights = { fire: 4, water: 4, plant: 4, psychic: 4, food: 3, drakofruta: 2 } as const;
+
+  it('deals drakofruta less often than an element', () => {
+    const bag = tileBag(weights);
+    const copies = (kind: string): number => bag.filter((entry) => entry === kind).length;
+
+    expect(copies('drakofruta')).toBeLessThan(copies('fire'));
+    expect(copies('drakofruta')).toBeLessThan(copies('food'));
+    expect(bag).toHaveLength(21);
+  });
+
+  it('refuses a bag that could deal nothing at all', () => {
+    expect(() =>
+      tileBag({ fire: 0, water: 0, plant: 0, psychic: 0, food: 0, drakofruta: 0 }),
+    ).toThrow(/nothing/);
   });
 });

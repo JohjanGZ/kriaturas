@@ -1,6 +1,7 @@
 import { z } from 'zod';
+import { baseElementSchema, elementSchema } from '../elements';
+import { BATTLE_MODES, FIELD_KINDS } from '../fields';
 import { BOARD_TILE_KINDS } from '../match3/tiles';
-import { elementSchema } from '../elements';
 
 /**
  * Shapes for the battle state that is PERSISTED.
@@ -26,6 +27,35 @@ export const storedBoardSchema = z
   });
 
 /**
+ * THE FIELD this battle is being fought on, copied in when it starts.
+ *
+ * It is a snapshot for the same reason the mana costs are: retuning a field
+ * must never move the rules under a fight already in progress. A battle in the
+ * ordinary mode simply has none, and every reader treats null as "the normal
+ * rules" rather than as a missing value.
+ */
+export const battleFieldSchema = z.strictObject({
+  kind: z.enum(FIELD_KINDS),
+  /** Only the volcano carries one. */
+  element: baseElementSchema.nullable().default(null),
+  /**
+   * Live mines. A mine is a CELL — tiles fall through it — so `at` is a board
+   * index and nothing about it travels with gravity.
+   */
+  bombs: z
+    .array(
+      z.strictObject({
+        at: z.number().int().min(0).max(143),
+        fuse: z.number().int().min(0).max(20),
+      }),
+    )
+    .max(6)
+    .default([]),
+});
+
+export type StoredField = z.infer<typeof battleFieldSchema>;
+
+/**
  * A rival creature. It has NO health: damage goes to the rival player, so a
  * creature is a weapon, never a target. Leaving an `hp` field here would be an
  * open invitation to start writing to it again.
@@ -35,6 +65,18 @@ export const storedRivalSchema = z.strictObject({
   name: z.string().min(1).max(80),
   element: elementSchema,
   attack: z.number().int().min(0).max(100_000),
+  /**
+   * The rival plays the board too, so it has a bar like yours and hits only
+   * when that bar fills. Defaulted, so battles written before the bot existed
+   * still parse instead of throwing on read.
+   */
+  manaCost: z.number().int().min(1).max(100).default(12),
+  mana: z.number().int().min(0).max(1000).default(0),
+  /** Transformed by the board's fruit, for this battle only. */
+  evolvedInBattle: z.boolean().default(false),
+  /** Statuses your powers left on it. Defaulted, so older rows still parse. */
+  blockedTurns: z.number().int().min(0).max(20).default(0),
+  paralyzedTurns: z.number().int().min(0).max(20).default(0),
 });
 
 export const storedRivalListSchema = z.array(storedRivalSchema).min(1).max(6);
@@ -52,6 +94,11 @@ export const battleStatusSchema = z.enum(BATTLE_STATUSES);
  */
 export const startBattleSchema = z.strictObject({
   creatureIds: z.array(z.uuid()).min(1).max(6),
+  /**
+   * Which MODE, never which field. Defaulted, so a form written before the
+   * mode existed still starts an ordinary battle instead of failing.
+   */
+  mode: z.enum(BATTLE_MODES).default('normal'),
 });
 
 const coordinate = z.number().int().min(0).max(11);
@@ -65,6 +112,20 @@ export const playMoveSchema = z.strictObject({
 });
 
 export const abandonBattleSchema = z.strictObject({
+  battleId: z.uuid(),
+});
+
+/**
+ * Spending the battle's fruit bar. Two ids and nothing else: the threshold and
+ * the effect are the server's business.
+ */
+export const evolveInBattleSchema = z.strictObject({
+  battleId: z.uuid(),
+  creatureId: z.uuid(),
+});
+
+/** Acknowledging the result screen. Carries nothing else: the result is a row. */
+export const dismissBattleSchema = z.strictObject({
   battleId: z.uuid(),
 });
 

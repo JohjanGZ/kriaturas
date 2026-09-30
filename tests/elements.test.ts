@@ -20,6 +20,18 @@ const combat: CombatConfig = {
   maxCascades: 20,
   playerMaxHp: 100,
   allowFreeSwaps: true,
+  damageOnlyOnSpecial: true,
+  manaPerGem: 1,
+  manaBonusPerExtraGem: 2,
+  botEnabled: true,
+  botSkill: 0.75,
+  movesPerTurn: 2,
+  extraMoveMinRun: 4,
+  extraMovesPerTurn: 1,
+  startingManaPercent: 40,
+  rivalManaCostPercent: 70,
+  fruitsToEvolve: 6,
+  tileWeights: { fire: 4, water: 4, plant: 4, psychic: 4, food: 3, drakofruta: 2 },
 };
 
 describe('elements', () => {
@@ -50,15 +62,28 @@ describe('elements', () => {
 });
 
 describe('board tiles', () => {
-  it('holds the four base elements plus one neutral tile, and no evolved element', () => {
-    expect(BOARD_TILE_KINDS).toEqual(['fire', 'water', 'plant', 'psychic', 'food']);
+  it('holds the four base elements plus the two resource tiles, and no evolved element', () => {
+    expect(BOARD_TILE_KINDS).toEqual([
+      'fire',
+      'water',
+      'plant',
+      'psychic',
+      'food',
+      'drakofruta',
+    ]);
     for (const evolved of EVOLVED_ELEMENTS) {
       expect(BOARD_TILE_KINDS).not.toContain(evolved);
     }
   });
 
-  it('never puts drakofruta on the board', () => {
-    expect(BOARD_TILE_KINDS).not.toContain('drakofruta');
+  it('puts drakofruta on the board as a RESOURCE, never as an element', () => {
+    /**
+     * It is aligned like any other tile, but it charges the IN-BATTLE evolution
+     * and triggers no creature — so nothing may ever read it as an element.
+     */
+    expect(BOARD_TILE_KINDS).toContain('drakofruta');
+    expect(isElementTile('drakofruta')).toBe(false);
+    expect(BASE_ELEMENTS).not.toContain('drakofruta');
   });
 
   it('treats food as a resource tile, not an element', () => {

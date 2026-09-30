@@ -32,7 +32,12 @@ export const speciesStatsSchema = z.strictObject({
 export const createSpeciesSchema = z.strictObject({
   name: z.string().trim().min(2).max(80),
   slug: slugSchema,
-  baseElement: baseElementSchema,
+  /**
+   * NULL means the species has no element of its own: it is born white and a
+   * stone decides what each creature becomes. It is an absence, not a tenth
+   * element, which is why it is a nullable field and not a wider enum.
+   */
+  baseElement: baseElementSchema.nullable(),
   baseImagePath: imagePathSchema.nullable().default(null),
   baseHp: z.number().int().min(1).max(9999),
   baseAttack: z.number().int().min(0).max(9999),
@@ -46,6 +51,20 @@ export const createSpeciesSchema = z.strictObject({
 export const updateSpeciesSchema = createSpeciesSchema.partial().extend({
   id: z.uuid(),
 });
+
+/**
+ * THE FOUR FACES of an elementless species: the name and the artwork it takes
+ * once a stone lands. Stats, powers and mana cost stay the species'.
+ */
+export const speciesFormSchema = z.strictObject({
+  element: baseElementSchema,
+  name: z.string().trim().min(2).max(80).nullable().default(null),
+  imagePath: imagePathSchema.nullable().default(null),
+});
+
+export const speciesFormListSchema = z.array(speciesFormSchema).max(4);
+
+export type SpeciesFormInput = z.infer<typeof speciesFormSchema>;
 
 export const speciesIdSchema = z.strictObject({ id: z.uuid() });
 

@@ -60,9 +60,16 @@ export const evolutionPaths = pgTable(
     uniqueIndex('evolution_paths_one_default_per_species')
       .on(t.speciesId)
       .where(sql`${t.isDefault}`),
+    /**
+     * TWO GRADES, told apart by where the path points:
+     *   - a BASE element  -> the ordinary evolution (same element, better stats),
+     *   - an EVOLVED one  -> the superior form, only for an EXCELLENT creature.
+     * The grade is derived (`pathTier`), so there is no column to contradict the
+     * target. What this constraint still refuses is an element that is not one.
+     */
     check(
-      'evolution_paths_target_is_evolved',
-      sql`${t.targetElement} in ('light', 'ice', 'poison', 'astral', 'rock')`,
+      'evolution_paths_target_is_element',
+      sql`${t.targetElement} in ('fire', 'water', 'plant', 'psychic', 'light', 'ice', 'poison', 'astral', 'rock')`,
     ),
     check('evolution_paths_hp_bonus_non_negative', sql`${t.hpBonus} >= 0`),
     check('evolution_paths_attack_bonus_non_negative', sql`${t.attackBonus} >= 0`),

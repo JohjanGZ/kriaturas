@@ -36,6 +36,90 @@
       "when": 1789079602195,
       "tag": "0004_battle_rivals",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1789164091799,
+      "tag": "0005_married_thunderball",
+      "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1789174858513,
+      "tag": "0006_uneven_dagger",
+      "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1789498671668,
+      "tag": "0007_fast_shaman",
+      "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1789514898958,
+      "tag": "0008_round_calypso",
+      "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1789516053984,
+      "tag": "0009_strip_fruit_reward",
+      "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1789534733740,
+      "tag": "0010_silly_spacker_dave",
+      "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1789535268066,
+      "tag": "0011_lonely_the_watchers",
+      "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "7",
+      "when": 1789602098728,
+      "tag": "0012_spooky_mother_askani",
+      "breakpoints": true
+    },
+    {
+      "idx": 13,
+      "version": "7",
+      "when": 1789613953944,
+      "tag": "0013_colorful_scarecrow",
+      "breakpoints": true
+    },
+    {
+      "idx": 14,
+      "version": "7",
+      "when": 1790652823291,
+      "tag": "0014_sour_firedrake",
+      "breakpoints": true
+    },
+    {
+      "idx": 15,
+      "version": "7",
+      "when": 1790660744560,
+      "tag": "0015_easy_champions",
+      "breakpoints": true
+    },
+    {
+      "idx": 16,
+      "version": "7",
+      "when": 1790664618813,
+      "tag": "0016_silent_mole_man",
+      "breakpoints": true
     }
   ]
 }

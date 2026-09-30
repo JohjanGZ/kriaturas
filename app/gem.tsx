@@ -12,7 +12,7 @@ import type { CSSProperties } from 'react';
  * and stays crisp on a phone.
  */
 
-export type GemKind = 'fire' | 'water' | 'plant' | 'psychic' | 'food';
+export type GemKind = 'fire' | 'water' | 'plant' | 'psychic' | 'food' | 'drakofruta';
 
 type Palette = {
   top: string;
@@ -25,7 +25,7 @@ type Palette = {
 };
 
 /** Food has no palette here: it is not a block. */
-const PALETTES: Record<Exclude<GemKind, 'food'>, Palette> = {
+const PALETTES: Record<Exclude<GemKind, 'food' | 'drakofruta'>, Palette> = {
   fire: {
     top: '#ffc98a',
     left: '#ff9a4d',
@@ -65,7 +65,7 @@ const PALETTES: Record<Exclude<GemKind, 'food'>, Palette> = {
 };
 
 /** The mark inside each block, so colour is never the only cue. */
-function Glyph({ kind, color }: { kind: Exclude<GemKind, 'food'>; color: string }) {
+function Glyph({ kind, color }: { kind: Exclude<GemKind, 'food' | 'drakofruta'>; color: string }) {
   switch (kind) {
     case 'fire':
       return (
@@ -147,6 +147,56 @@ function Fruit() {
   );
 }
 
+/**
+ * DRAKOFRUTA — the rare one.
+ *
+ * A loose fruit like food, because it charges no creature either, but it must
+ * never be mistaken for it: this is the tile that transforms a kriatura for the
+ * rest of the battle, and both sides are fighting over it. So it is a pitaya —
+ * magenta hide, green fins, pale speckled flesh — and it glows.
+ */
+function Drakofruit() {
+  return (
+    <>
+      <ellipse cx="50" cy="87" rx="19" ry="5" fill="#000" opacity="0.3" />
+
+      <defs>
+        <radialGradient id="drako-body" cx="0.35" cy="0.28" r="0.85">
+          <stop offset="0%" stopColor="#ff8ad8" />
+          <stop offset="55%" stopColor="#d61f8f" />
+          <stop offset="100%" stopColor="#7a0b52" />
+        </radialGradient>
+        <linearGradient id="drako-fin" x1="0" y1="0" x2="1" y2="1">
+          <stop offset="0%" stopColor="#b6f36a" />
+          <stop offset="100%" stopColor="#3f9b2f" />
+        </linearGradient>
+      </defs>
+
+      {/* the glow that says "rare" before anything else is read */}
+      <circle cx="50" cy="58" r="30" fill="#ff5ec4" opacity="0.22" />
+
+      {/* body */}
+      <ellipse cx="50" cy="58" rx="23" ry="27" fill="url(#drako-body)" />
+
+      {/* scales: what separates it from a cherry at a glance */}
+      <path d="M27 46c-9-3-14-8-16-14 9-1 16 3 20 11z" fill="url(#drako-fin)" />
+      <path d="M73 46c9-3 14-8 16-14-9-1-16 3-20 11z" fill="url(#drako-fin)" />
+      <path d="M26 66c-9 0-15-3-19-9 9-3 16-1 22 6z" fill="url(#drako-fin)" opacity="0.9" />
+      <path d="M74 66c9 0 15-3 19-9-9-3-16-1-22 6z" fill="url(#drako-fin)" opacity="0.9" />
+      <path d="M50 28c-4-8-4-14-1-20 6 5 8 12 5 20z" fill="url(#drako-fin)" />
+
+      {/* pale flesh with seeds, through a split in the hide */}
+      <ellipse cx="50" cy="62" rx="10" ry="13" fill="#fff0f8" opacity="0.92" />
+      <circle cx="47" cy="56" r="1.6" fill="#2b2430" />
+      <circle cx="53" cy="60" r="1.6" fill="#2b2430" />
+      <circle cx="48" cy="66" r="1.6" fill="#2b2430" />
+      <circle cx="54" cy="70" r="1.6" fill="#2b2430" />
+
+      <ellipse cx="40" cy="44" rx="7" ry="4" fill="#fff" opacity="0.5" transform="rotate(-25 40 44)" />
+    </>
+  );
+}
+
 export function Gem({
   kind,
   className,
@@ -156,7 +206,7 @@ export function Gem({
   className?: string;
   style?: CSSProperties;
 }) {
-  if (kind === 'food') {
+  if (kind === 'food' || kind === 'drakofruta') {
     return (
       <svg
         viewBox="0 0 100 100"
@@ -165,7 +215,7 @@ export function Gem({
         role="presentation"
         focusable="false"
       >
-        <Fruit />
+        {kind === 'food' ? <Fruit /> : <Drakofruit />}
       </svg>
     );
   }

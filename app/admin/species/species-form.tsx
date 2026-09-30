@@ -2,8 +2,11 @@
 
 import { useActionState, useState } from 'react';
 import { useFormStatus } from 'react-dom';
+import type { Effect } from '@/core/effects/schema';
 import { BASE_ELEMENTS, CANONICAL_EVOLUTIONS, type BaseElement } from '@/core/elements';
+import { CreatureArt, type ArtElement } from '../../creature-art';
 import type { ActionState } from './actions';
+import { EffectsEditor } from './effects-editor';
 import { ImageField } from './image-field';
 
 /**
@@ -22,7 +25,7 @@ type Props = {
     id: string;
     name: string;
     slug: string;
-    baseElement: BaseElement;
+    baseElement: BaseElement | null;
     baseImageUrl: string | null;
     baseHp: number;
     baseAttack: number;
@@ -30,6 +33,7 @@ type Props = {
     manaCost: number;
     description: string | null;
     isPublished: boolean;
+    effects: readonly Effect[];
   };
 };
 
@@ -58,7 +62,13 @@ export function SpeciesForm({ action, submitLabel, species }: Props) {
   const [name, setName] = useState(species?.name ?? '');
   const [slug, setSlug] = useState(species?.slug ?? '');
   const [slugTouched, setSlugTouched] = useState(isEdit);
-  const [baseElement, setBaseElement] = useState<BaseElement>(species?.baseElement ?? 'fire');
+  /**
+   * `null` is a real choice here, not an empty form: a species with no element
+   * is born white and a stone decides what each creature becomes.
+   */
+  const [baseElement, setBaseElement] = useState<BaseElement | null>(
+    species ? species.baseElement : 'fire',
+  );
 
   const errorFor = (field: string): string | undefined => state.fieldErrors?.[field]?.[0];
 
@@ -110,7 +120,7 @@ export function SpeciesForm({ action, submitLabel, species }: Props) {
             <label htmlFor="baseElement">Elemento base</label>
             {isEdit ? (
               <>
-                <div className="readonly">{baseElement}</div>
+                <div className="readonly">{baseElement ?? 'sin elemento'}</div>
                 <p className="small muted">
                   No se puede cambiar: las vías de evolución y el disparo en el tablero
                   dependen de él.
@@ -120,23 +130,32 @@ export function SpeciesForm({ action, submitLabel, species }: Props) {
               <select
                 id="baseElement"
                 name="baseElement"
-                value={baseElement}
-                onChange={(event) => setBaseElement(event.target.value as BaseElement)}
+                value={baseElement ?? 'none'}
+                onChange={(event) =>
+                  setBaseElement(
+                    event.target.value === 'none' ? null : (event.target.value as BaseElement),
+                  )
+                }
               >
                 {BASE_ELEMENTS.map((element) => (
                   <option key={element} value={element}>
                     {element}
                   </option>
                 ))}
+                <option value="none">sin elemento (nace blanca)</option>
               </select>
             )}
           </div>
 
           <div className="field" style={{ flex: '1 1 220px' }}>
             <label>Evolución por defecto (derivada)</label>
-            <div className="readonly">{CANONICAL_EVOLUTIONS[baseElement]}</div>
+            <div className="readonly">
+              {baseElement ? CANONICAL_EVOLUTIONS[baseElement] : 'una vía por cada elemento'}
+            </div>
             <p className="small muted">
-              Solo lectura. Se crea como vía por defecto y podrás añadir otras ramas.
+              {baseElement
+                ? 'Solo lectura. Se crea como vía por defecto y podrás añadir otras ramas.'
+                : 'Sin elemento se crean cuatro caras y cuatro vías, una por elemento: la piedra decide cuál toma cada kriatura.'}
             </p>
           </div>
         </div>
@@ -171,6 +190,29 @@ export function SpeciesForm({ action, submitLabel, species }: Props) {
           <textarea id="description" name="description" defaultValue={species?.description ?? ''} />
         </div>
 
+        {/*
+         * WHAT YOU ARE MAKING, drawn as you type.
+         *
+         * The generated art is what a species without a drawing looks like
+         * everywhere else in the game, so showing it here is not decoration: it
+         * is the only way to tell, before saving, that a white species really
+         * comes out white and crownless.
+         */}
+        <div className="row" style={{ alignItems: 'center', gap: '0.9rem' }}>
+          <CreatureArt
+            element={(baseElement ?? 'none') as ArtElement}
+            name={name || 'kriatura'}
+            className="creature-thumb"
+          />
+          <div className="small muted">
+            <strong>{name || 'Sin nombre'}</strong>
+            <br />
+            {baseElement
+              ? `Carga con las gemas de ${baseElement}.`
+              : 'Nace blanca. No podrá jugar hasta que una piedra le dé un elemento.'}
+          </div>
+        </div>
+
         <ImageField name="baseImage" label="Imagen base" currentUrl={species?.baseImageUrl} />
 
         <div className="checkbox">
@@ -184,6 +226,9 @@ export function SpeciesForm({ action, submitLabel, species }: Props) {
           <label htmlFor="isPublished">Publicada</label>
         </div>
       </div>
+
+      <EffectsEditor name="effects" initial={species?.effects} />
+      {errorFor('effects') ? <p className="error">{errorFor('effects')}</p> : null}
 
       <SubmitButton label={submitLabel} />
     </form>

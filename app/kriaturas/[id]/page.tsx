@@ -5,7 +5,7 @@ import { loadGameConfig } from '@/db/queries/battle';
 import { getCreatureDetail } from '@/db/queries/creature';
 import { getCurrentPlayer } from '@/lib/auth';
 import { CreatureArt, type ArtElement } from '../../creature-art';
-import { ChoosePathForm, EvolveForm, FeedForm } from '../care-forms';
+import { FeedForm } from '../care-forms';
 
 export default async function CreaturePage({ params }: { params: Promise<{ id: string }> }) {
   const player = await getCurrentPlayer();
@@ -18,24 +18,6 @@ export default async function CreaturePage({ params }: { params: Promise<{ id: s
   const config = await loadGameConfig();
   const stamina = deriveStamina(creature.lastFed, new Date(), config.stamina);
 
-  const chosen = creature.paths.find((path) => path.id === creature.chosenPathId) ?? null;
-  const canAfford = creature.playerFruits >= creature.fruitCost;
-
-  /** The path the evolve button would actually take. */
-  const target = chosen ?? (creature.paths.length === 1 ? creature.paths[0] : null);
-  const requirementsMet = target?.allRequirementsMet ?? false;
-  const canEvolve = !creature.isEvolved && target !== null && requirementsMet && canAfford;
-
-  const hint = creature.isEvolved
-    ? 'Ya evolucionó. Es permanente.'
-    : target === null
-      ? 'Elige primero una vía.'
-      : !requirementsMet
-        ? 'Faltan objetivos por cumplir.'
-        : !canAfford
-          ? `Necesitas ${creature.fruitCost} de drakofruta y tienes ${creature.playerFruits}.`
-          : `Gastarás ${creature.fruitCost} de drakofruta. No se puede deshacer.`;
-
   return (
     <main className="shell">
       <p className="small">
@@ -44,7 +26,7 @@ export default async function CreaturePage({ params }: { params: Promise<{ id: s
 
       <div className="row" style={{ alignItems: 'center', gap: '0.8rem' }}>
         <CreatureArt
-          element={creature.element as ArtElement}
+          element={(creature.evolvedElement ?? creature.element ?? 'none') as ArtElement}
           name={creature.name}
           style={{ width: 90, height: 90, flex: '0 0 auto' }}
         />
@@ -85,31 +67,21 @@ export default async function CreaturePage({ params }: { params: Promise<{ id: s
       </section>
 
       <section className="card">
-        <h2>Evolución</h2>
-        {creature.isEvolved ? (
-          <p className="notice notice-ok">
-            Ya evolucionó por la vía <strong>{chosen?.targetElement}</strong>. Es permanente e
-            irreversible.
-          </p>
-        ) : chosen ? (
-          <p className="small muted">
-            Vía elegida: <strong>{chosen.name}</strong> → {chosen.targetElement}. La elección es
-            permanente; solo falta cumplir y pagar.
-          </p>
-        ) : (
-          <p className="small muted">
-            Elige una vía. Una vez elegida no se puede cambiar, así que mira bien los requisitos.
-          </p>
-        )}
+        <h2>Transformación en combate</h2>
+        <p className="small muted">
+          Fuera del combate una kriatura no cambia. DENTRO de una partida sí: al alinear
+          drakofruta en el tablero llenas una barra, y al gastarla esta kriatura pega como
+          evolucionada y cambia de aspecto — hasta que esa partida termina.
+        </p>
 
-        {creature.paths.map((path) => {
-          const isChosen = path.id === creature.chosenPathId;
-          const dimmed = creature.chosenPathId !== null && !isChosen;
-          return (
+        {creature.paths.length === 0 ? (
+          <p className="small muted">Esta especie todavía no tiene vía definida.</p>
+        ) : (
+          creature.paths.map((path) => (
             <div
               key={path.id}
               className="card"
-              style={{ opacity: dimmed ? 0.45 : 1, marginTop: '0.8rem' }}
+              style={{ marginTop: '0.8rem', opacity: path.isDefault ? 1 : 0.5 }}
             >
               <div className="row" style={{ justifyContent: 'space-between' }}>
                 <strong>{path.name}</strong>
@@ -117,42 +89,10 @@ export default async function CreaturePage({ params }: { params: Promise<{ id: s
               </div>
               <p className="small">
                 +{path.hpBonus} HP · +{path.attackBonus} ATQ · +{path.defenseBonus} DEF
-                {path.isDefault ? ' · por defecto' : ''}
+                {path.isDefault ? ' · es la que usa la transformación' : ''}
               </p>
-
-              {path.requirements.length === 0 ? (
-                <p className="small muted">Sin requisitos.</p>
-              ) : (
-                <ul className="small" style={{ paddingLeft: '1.1rem', margin: '0.4rem 0' }}>
-                  {path.requirements.map((req) => (
-                    <li key={req.objectiveId}>
-                      {req.completed ? '✅' : '⬜'} {req.name} — {Math.min(req.current, req.target)}/
-                      {req.target}
-                    </li>
-                  ))}
-                </ul>
-              )}
-
-              {!creature.isEvolved && creature.chosenPathId === null ? (
-                <ChoosePathForm
-                  creatureId={creature.id}
-                  pathId={path.id}
-                  label={`Elegir ${path.targetElement}`}
-                />
-              ) : null}
             </div>
-          );
-        })}
-
-        {creature.isEvolved ? null : (
-          <div style={{ marginTop: '1rem' }}>
-            <EvolveForm
-              creatureId={creature.id}
-              pathId={target?.id ?? null}
-              disabled={!canEvolve}
-              hint={hint}
-            />
-          </div>
+          ))
         )}
       </section>
     </main>

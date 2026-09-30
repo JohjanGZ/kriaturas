@@ -19,7 +19,6 @@ const play: PlayConfig = {
   staminaCostPerMatch: 5,
   teamSize: 2,
   defaultManaCost: 12,
-  drakofrutaPerWin: 1,
   coinsPerWin: 50,
 };
 

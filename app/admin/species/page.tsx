@@ -47,9 +47,14 @@ export default async function SpeciesListPage({
     <>
       <div className="row" style={{ justifyContent: 'space-between', marginBottom: '1rem' }}>
         <h1>Especies</h1>
-        <Link className="btn btn-primary" href="/admin/species/new">
-          Nueva especie
-        </Link>
+        <div className="row" style={{ gap: '0.5rem' }}>
+          <Link className="btn" href="/admin/poderes">
+            Lista de poderes
+          </Link>
+          <Link className="btn btn-primary" href="/admin/species/new">
+            Nueva especie
+          </Link>
+        </div>
       </div>
 
       <form className="card row" method="get">
@@ -103,7 +108,7 @@ export default async function SpeciesListPage({
                 <img className="thumb" src={storage.urlFor(row.baseImagePath)} alt="" />
               ) : (
                 <CreatureArt
-                  element={row.baseElement as ArtElement}
+                  element={(row.baseElement ?? 'none') as ArtElement}
                   name={row.name}
                   className="creature-thumb"
                 />

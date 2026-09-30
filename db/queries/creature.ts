@@ -1,5 +1,6 @@
-import { and, asc, eq, inArray } from 'drizzle-orm';
-import { evaluateEvolution, evaluatePathChoice, fruitCostFor } from '@/core/evolution';
+import { and, asc, eq, inArray, isNull } from 'drizzle-orm';
+import { applyAdjustment, effectiveAdjustment } from '@/core/balance';
+import { type BaseElement, resolveElement } from '@/core/elements';
 import { feed } from '@/core/stamina';
 import type { StaminaConfig } from '@/core/schemas/config';
 import { getDb } from '../client';
@@ -13,25 +14,34 @@ import {
   species,
 } from '../schema';
 import { loadGameConfig } from './battle';
+import { adjustmentFor, loadSeasonBalance } from './season';
 
 /**
- * Creature care and evolution.
+ * Creature care.
  *
- * Both are the other half of the loop: the board hands out food and objective
- * progress, and this is where the player spends them. Every number that matters
- * is recomputed here from rows — the caller supplies an id and an amount, never
- * a stamina value, a cost or a completion.
+ * The other half of the loop: the board hands out food and objective progress,
+ * and this is where the player spends them. Every number that matters is
+ * recomputed here from rows — the caller supplies an id and an amount, never a
+ * stamina value or a completion.
+ *
+ * EVOLUTION IS NOT HERE ANY MORE. It happens inside a battle, paid for with the
+ * drakofruta aligned on the board, and it lasts exactly that battle — see
+ * `core/battle` and `db/queries/battle.ts`. Nothing may write `is_evolved`.
  */
 
 export type CreatureListItem = {
   id: string;
   name: string;
   speciesName: string;
-  element: string;
+  /** Null for a white creature: no stone has given it one yet. */
+  element: string | null;
   attack: number;
   manaCost: number;
-  isEvolved: boolean;
-  evolvedElement: string | null;
+  /** What the running season adds or takes away. Zero when nothing is tuned. */
+  attackDelta: number;
+  manaCostDelta: number;
+  /** The rare mark. In battle it transforms into the SUPERIOR element. */
+  isExcellent: boolean;
   lastFed: Date;
 };
 
@@ -42,31 +52,47 @@ export async function listPlayerCreatures(playerId: string): Promise<CreatureLis
       id: creatures.id,
       nickname: creatures.nickname,
       lastFed: creatures.lastFed,
-      isEvolved: creatures.isEvolved,
+      isExcellent: creatures.isExcellent,
       speciesName: species.name,
-      element: species.baseElement,
+      speciesElement: species.baseElement,
+      /** What a stone gave it, if anything. Null for every ordinary creature. */
+      awakenedElement: creatures.element,
       attack: species.baseAttack,
       manaCost: species.manaCost,
-      pathBonus: evolutionPaths.attackBonus,
-      pathElement: evolutionPaths.targetElement,
+      speciesId: creatures.speciesId,
     })
     .from(creatures)
     .innerJoin(species, eq(species.id, creatures.speciesId))
-    .leftJoin(evolutionPaths, eq(evolutionPaths.id, creatures.evolutionPathId))
     .where(eq(creatures.playerId, playerId))
     .orderBy(asc(creatures.createdAt));
 
-  return rows.map((row) => ({
-    id: row.id,
-    name: row.nickname ?? row.speciesName,
-    speciesName: row.speciesName,
-    element: row.element,
-    attack: row.attack + (row.isEvolved ? (row.pathBonus ?? 0) : 0),
-    manaCost: row.manaCost,
-    isEvolved: row.isEvolved,
-    evolvedElement: row.isEvolved ? (row.pathElement ?? null) : null,
-    lastFed: row.lastFed,
-  }));
+  /**
+   * THE SEASON IS SHOWN WHERE THE PLAYER CHOOSES, not only where the battle
+   * resolves. A roster printing the species numbers while the fight uses tuned
+   * ones is a roster that lies.
+   */
+  const balance = await loadSeasonBalance();
+
+  return rows.map((row) => {
+    /** Effective, not raw: an excellent creature ignores the season's nerfs. */
+    const adjustment = effectiveAdjustment(adjustmentFor(balance, row.speciesId), {
+      excellent: row.isExcellent,
+    });
+    const tuned = applyAdjustment({ attack: row.attack, manaCost: row.manaCost }, adjustment);
+    return {
+      id: row.id,
+      name: row.nickname ?? row.speciesName,
+      speciesName: row.speciesName,
+      /** Null means WHITE: it has no element yet, so it cannot be played. */
+      element: resolveElement(row.speciesElement, row.awakenedElement),
+      attack: tuned.attack,
+      manaCost: tuned.manaCost,
+      attackDelta: adjustment.attackDelta,
+      manaCostDelta: adjustment.manaCostDelta,
+      isExcellent: row.isExcellent,
+      lastFed: row.lastFed,
+    };
+  });
 }
 
 export type PathView = {
@@ -94,16 +120,19 @@ export type CreatureDetail = {
   name: string;
   speciesName: string;
   speciesId: string;
-  element: string;
+  /** Null for a white creature: no stone has given it one yet. */
+  element: string | null;
   attack: number;
   hp: number;
   manaCost: number;
+  attackDelta: number;
+  manaCostDelta: number;
   lastFed: Date;
   isEvolved: boolean;
   chosenPathId: string | null;
+  /** What it LOOKS like once evolved. The attack trigger is still `element`. */
+  evolvedElement: string | null;
   paths: PathView[];
-  fruitCost: number;
-  playerFruits: number;
   playerFood: number;
 };
 
@@ -120,10 +149,12 @@ export async function getCreatureDetail(
       nickname: creatures.nickname,
       lastFed: creatures.lastFed,
       isEvolved: creatures.isEvolved,
+      isExcellent: creatures.isExcellent,
       chosenPathId: creatures.evolutionPathId,
       speciesId: species.id,
       speciesName: species.name,
-      element: species.baseElement,
+      speciesElement: species.baseElement,
+      awakenedElement: creatures.element,
       attack: species.baseAttack,
       hp: species.baseHp,
       manaCost: species.manaCost,
@@ -214,21 +245,31 @@ export async function getCreatureDetail(
     };
   });
 
+  const balance = await loadSeasonBalance();
+  const adjustment = effectiveAdjustment(adjustmentFor(balance, row.speciesId), {
+    excellent: row.isExcellent,
+  });
+  const tuned = applyAdjustment({ attack: row.attack, manaCost: row.manaCost }, adjustment);
+
   return {
     id: row.id,
     name: row.nickname ?? row.speciesName,
     speciesName: row.speciesName,
     speciesId: row.speciesId,
-    element: row.element,
-    attack: row.attack,
+    /** Null means WHITE: no stone has landed on it yet, and it cannot fight. */
+    element: resolveElement(row.speciesElement, row.awakenedElement),
+    attack: tuned.attack,
     hp: row.hp,
-    manaCost: row.manaCost,
+    manaCost: tuned.manaCost,
+    attackDelta: adjustment.attackDelta,
+    manaCostDelta: adjustment.manaCostDelta,
     lastFed: row.lastFed,
     isEvolved: row.isEvolved,
     chosenPathId: row.chosenPathId,
+    evolvedElement: row.isEvolved
+      ? (pathViews.find((path) => path.id === row.chosenPathId)?.targetElement ?? null)
+      : null,
     paths: pathViews,
-    fruitCost: fruitCostFor(player.evolutionsPerformed, config.evolution),
-    playerFruits: player.drakofruta,
     playerFood: player.food,
   };
 }
@@ -289,144 +330,48 @@ export async function feedCreature(
   };
 }
 
-export type ChoosePathResult = { ok: true } | { ok: false; reason: string };
-
-/** Locking a branch. Permanent — the service refuses a second write. */
-export async function chooseEvolutionPath(
-  creatureId: string,
-  playerId: string,
-  pathId: string,
-  now: Date,
-): Promise<ChoosePathResult> {
-  const db = await getDb();
-
-  const [creature] = await db
-    .select()
-    .from(creatures)
-    .where(and(eq(creatures.id, creatureId), eq(creatures.playerId, playerId)))
-    .limit(1);
-  if (!creature) return { ok: false, reason: 'not_found' };
-
-  const [path] = await db.select().from(evolutionPaths).where(eq(evolutionPaths.id, pathId)).limit(1);
-  if (!path) return { ok: false, reason: 'path_not_found' };
-
-  const verdict = evaluatePathChoice(
-    {
-      id: creature.id,
-      speciesId: creature.speciesId,
-      isEvolved: creature.isEvolved,
-      evolutionPathId: creature.evolutionPathId,
-    },
-    { id: path.id, speciesId: path.speciesId },
-  );
-  if (!verdict.ok) return { ok: false, reason: verdict.reason };
-
-  await db
-    .update(creatures)
-    .set({ evolutionPathId: path.id, evolutionChosenAt: now })
-    .where(eq(creatures.id, creatureId));
-
-  return { ok: true };
-}
-
-export type EvolveResult =
-  | { ok: true; cost: number; targetElement: string }
-  | { ok: false; reason: string; missing?: string[] };
+export type AwakenFailure =
+  | 'not_your_creature'
+  | 'species_has_its_own_element'
+  | 'already_awakened';
 
 /**
- * Evolving. Three tables move together — the player loses fruits and gains a
- * counter, the creature flips — so it is one transaction, and the cost is
- * recomputed from the config row rather than trusted from the page that
- * displayed it.
+ * A STONE LANDS: the white creature becomes one of the four.
+ *
+ * Written ONCE, like the evolution path, and guarded by a WHERE rather than by
+ * a read-then-write: two stones used at the same instant would both pass a
+ * check done in TypeScript, and the second must lose. The row's own constraint
+ * backs it up, so a creature can never end up with an element and no instant.
+ *
+ * What SPENDS the stone is not here yet — the item does not exist — so this is
+ * the write the mechanic will call, and for now the dev tool does.
  */
-export async function evolveCreature(
+export async function awakenCreature(
   creatureId: string,
   playerId: string,
-  pathId: string | null,
+  element: BaseElement,
   now: Date,
-): Promise<EvolveResult> {
+): Promise<{ ok: true } | { ok: false; reason: AwakenFailure }> {
   const db = await getDb();
-  const config = await loadGameConfig();
 
-  const [creature] = await db
-    .select()
+  const [row] = await db
+    .select({ id: creatures.id, speciesElement: species.baseElement })
     .from(creatures)
+    .innerJoin(species, eq(species.id, creatures.speciesId))
     .where(and(eq(creatures.id, creatureId), eq(creatures.playerId, playerId)))
     .limit(1);
-  if (!creature) return { ok: false, reason: 'not_found' };
+  if (!row) return { ok: false, reason: 'not_your_creature' };
 
-  const targetPathId = creature.evolutionPathId ?? pathId;
-  if (!targetPathId) return { ok: false, reason: 'path_not_chosen' };
-
-  const [path] = await db
-    .select()
-    .from(evolutionPaths)
-    .where(eq(evolutionPaths.id, targetPathId))
-    .limit(1);
-  if (!path) return { ok: false, reason: 'path_not_found' };
-
-  const [player] = await db.select().from(players).where(eq(players.id, playerId)).limit(1);
-  if (!player) return { ok: false, reason: 'not_found' };
-
-  const reqs = await db
-    .select({ objectiveId: objectives.id, scope: objectives.scope })
-    .from(evolutionRequirements)
-    .innerJoin(objectives, eq(objectives.id, evolutionRequirements.objectiveId))
-    .where(eq(evolutionRequirements.evolutionPathId, path.id));
-
-  const completed: string[] = [];
-  for (const req of reqs) {
-    const [entry] = await db
-      .select()
-      .from(objectiveProgress)
-      .where(
-        and(
-          eq(objectiveProgress.objectiveId, req.objectiveId),
-          eq(objectiveProgress.playerId, playerId),
-        ),
-      );
-    const matchesScope =
-      req.scope === 'creature' ? entry?.creatureId === creatureId : entry?.creatureId === null;
-    if (entry && matchesScope && entry.completedAt !== null) completed.push(req.objectiveId);
+  /** A creature that already has an element of its own has nothing to decide. */
+  if (row.speciesElement !== null) {
+    return { ok: false, reason: 'species_has_its_own_element' };
   }
 
-  const verdict = evaluateEvolution({
-    creature: {
-      id: creature.id,
-      speciesId: creature.speciesId,
-      isEvolved: creature.isEvolved,
-      evolutionPathId: creature.evolutionPathId,
-    },
-    path: { id: path.id, speciesId: path.speciesId },
-    requiredObjectiveIds: reqs.map((req) => req.objectiveId),
-    completedObjectiveIds: completed,
-    player: { drakofruta: player.drakofruta, evolutionsPerformed: player.evolutionsPerformed },
-    config: config.evolution,
-  });
+  const written = await db
+    .update(creatures)
+    .set({ element, awakenedAt: now })
+    .where(and(eq(creatures.id, creatureId), isNull(creatures.element)))
+    .returning({ id: creatures.id });
 
-  if (!verdict.ok) {
-    return { ok: false, reason: verdict.reason, missing: [...verdict.missingObjectiveIds] };
-  }
-
-  await db.transaction(async (tx) => {
-    await tx
-      .update(players)
-      .set({
-        drakofruta: player.drakofruta - verdict.cost,
-        evolutionsPerformed: player.evolutionsPerformed + 1,
-      })
-      .where(eq(players.id, playerId));
-
-    await tx
-      .update(creatures)
-      .set({
-        isEvolved: true,
-        evolvedAt: now,
-        evolutionPathId: path.id,
-        evolutionChosenAt: creature.evolutionChosenAt ?? now,
-      })
-      .where(eq(creatures.id, creatureId));
-  });
-
-  return { ok: true, cost: verdict.cost, targetElement: path.targetElement };
+  return written.length > 0 ? { ok: true } : { ok: false, reason: 'already_awakened' };
 }

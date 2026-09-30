@@ -1,13 +1,15 @@
 import { and, asc, eq, ilike, inArray, or, sql } from 'drizzle-orm';
-import { CANONICAL_EVOLUTIONS, type BaseElement } from '@/core/elements';
+import { BASE_ELEMENTS, CANONICAL_EVOLUTIONS, type BaseElement } from '@/core/elements';
 import type { CreateSpeciesInput, SpeciesFilter, UpdateSpeciesInput } from '@/core/schemas/species';
 import { getDb } from '../client';
 import {
   type EvolutionPathRow,
+  type SpeciesFormRow,
   type SpeciesRow,
   creatures,
   evolutionPaths,
   species,
+  speciesForms,
 } from '../schema';
 
 /**
@@ -19,6 +21,8 @@ import {
 
 export type SpeciesWithPaths = SpeciesRow & {
   paths: EvolutionPathRow[];
+  /** The four awakened faces. Empty for an ordinary species. */
+  forms: SpeciesFormRow[];
   creatureCount: number;
 };
 
@@ -66,6 +70,12 @@ async function attachPaths(rows: SpeciesRow[]): Promise<SpeciesWithPaths[]> {
     .where(inArray(evolutionPaths.speciesId, ids))
     .orderBy(asc(evolutionPaths.sortOrder), asc(evolutionPaths.targetElement));
 
+  const forms = await db
+    .select()
+    .from(speciesForms)
+    .where(inArray(speciesForms.speciesId, ids))
+    .orderBy(asc(speciesForms.element));
+
   const counts = await db
     .select({ speciesId: creatures.speciesId, count: sql<number>`count(*)::int` })
     .from(creatures)
@@ -77,6 +87,7 @@ async function attachPaths(rows: SpeciesRow[]): Promise<SpeciesWithPaths[]> {
   return rows.map((row) => ({
     ...row,
     paths: paths.filter((path) => path.speciesId === row.id),
+    forms: forms.filter((form) => form.speciesId === row.id),
     creatureCount: countBySpecies.get(row.id) ?? 0,
   }));
 }
@@ -114,6 +125,31 @@ export async function createSpecies(
       })
       .returning();
     if (!row) throw new Error('No se pudo crear la especie');
+
+    if (input.baseElement === null) {
+      /**
+       * A WHITE SPECIES IS BORN WITH FOUR FUTURES, so it gets four of
+       * everything: a face per element (the look a stone gives it) and a path
+       * per element (what that face later transforms into).
+       *
+       * Creating them empty rather than on demand is what makes the admin
+       * legible: the four slots are visible from the first save, so an artist
+       * can see at a glance which ones still have no drawing.
+       */
+      await tx.insert(speciesForms).values(
+        BASE_ELEMENTS.map((element) => ({ speciesId: row.id, element })),
+      );
+      await tx.insert(evolutionPaths).values(
+        BASE_ELEMENTS.map((element, index) => ({
+          speciesId: row.id,
+          targetElement: element,
+          name: `Vía ${element}`,
+          isDefault: index === 0,
+          sortOrder: index,
+        })),
+      );
+      return row;
+    }
 
     const canonical = CANONICAL_EVOLUTIONS[input.baseElement satisfies BaseElement];
     await tx.insert(evolutionPaths).values({
@@ -173,4 +209,39 @@ export async function slugExists(slug: string, exceptId?: string): Promise<boole
     .limit(1);
   if (!row) return false;
   return row.id !== exceptId;
+}
+
+/**
+ * Writes one awakened face — the name and the drawing a stone reveals.
+ *
+ * An upsert on (species, element) rather than an insert: the four rows are
+ * created with the species, so editing a face is always an update of a row that
+ * already exists, and the unique index is what guarantees there is exactly one
+ * per element instead of a growing pile of drafts.
+ */
+export async function setSpeciesForm(
+  speciesId: string,
+  element: BaseElement,
+  patch: { name: string | null; imagePath?: string | null },
+): Promise<void> {
+  const db = await getDb();
+  const values = {
+    speciesId,
+    element,
+    name: patch.name,
+    ...(patch.imagePath !== undefined ? { imagePath: patch.imagePath } : {}),
+  };
+
+  await db
+    .insert(speciesForms)
+    .values(values)
+    .onConflictDoUpdate({
+      target: [speciesForms.speciesId, speciesForms.element],
+      /** An absent image means "keep the current drawing", not "clear it". */
+      set: {
+        name: patch.name,
+        ...(patch.imagePath !== undefined ? { imagePath: patch.imagePath } : {}),
+        updatedAt: new Date(),
+      },
+    });
 }

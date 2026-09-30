@@ -2,10 +2,17 @@
 
 import { startTransition, useActionState, useEffect, useRef, useState } from 'react';
 import { flushSync, useFormStatus } from 'react-dom';
-import type { StoredBoard, StoredRival } from '@/core/schemas/battle';
+import type { StoredBoard, StoredField, StoredRival } from '@/core/schemas/battle';
 import { CreatureArt, type ArtElement } from '../creature-art';
+import { FIELD_LABELS } from '../field-labels';
 import { Gem, type GemKind } from '../gem';
-import { type BattleActionState, abandonBattleAction, playMoveAction } from './actions';
+import {
+  type BattleActionState,
+  abandonBattleAction,
+  dismissBattleAction,
+  evolveInBattleAction,
+  playMoveAction,
+} from './actions';
 
 /**
  * The board. It RENDERS and REPLAYS; it never decides.
@@ -27,13 +34,36 @@ type TeamMember = {
   creatureId: string;
   name: string;
   element: string;
+  /** Drawn instead of `element` once it evolved; the trigger never changes. */
+  evolvedElement: string | null;
+  /** Transformed by the board's fruit, for this battle only. */
+  evolvedInBattle: boolean;
+  /** The rare mark: it transforms into the SUPERIOR element instead. */
+  isExcellent: boolean;
   attack: number;
   mana: number;
   manaCost: number;
-  isEvolved: boolean;
 };
 
 type Cell = { row: number; col: number };
+
+/** A bolt in flight: where it starts, and how far it has to travel. */
+type Shot = {
+  key: number;
+  x: number;
+  y: number;
+  dx: number;
+  dy: number;
+  tone: 'mine' | 'foe';
+};
+
+/** What one creature's bar did this move, as the server reported it. */
+type AttackView = {
+  id: string;
+  manaAfter: number;
+  manaCost: number;
+  charged: boolean;
+};
 
 type GemState = {
   id: number;
@@ -50,6 +80,10 @@ const adjacent = (a: Cell, b: Cell): boolean =>
 
 const SWAP_MS = 220;
 const CLEAR_MS = 320;
+/** How long a bolt takes to reach the life bar it was aimed at. */
+const SHOT_MS = 420;
+/** Long enough to read "Turno del rival" before the board starts moving on its own. */
+const BANNER_MS = 950;
 /** A long drop must take longer than a short one, or nothing reads as gravity. */
 const fallMs = (rows: number): number => 190 + Math.max(1, rows) * 85;
 
@@ -82,6 +116,15 @@ function AbandonButton() {
   );
 }
 
+function DismissButton({ label }: { label: string }) {
+  const { pending } = useFormStatus();
+  return (
+    <button className="btn-primary" type="submit" disabled={pending}>
+      {pending ? 'Saliendo…' : label}
+    </button>
+  );
+}
+
 export function BattleBoard({
   battleId,
   board,
@@ -91,9 +134,19 @@ export function BattleBoard({
   opponentHp,
   opponentMaxHp,
   shield,
+  opponentShield,
+  field,
+  fruits,
+  rivalFruits,
+  fruitsToEvolve,
+  canEvolve,
   turn,
+  movesLeft,
+  movesPerTurn,
   team,
   finished,
+  status,
+  rewards,
 }: {
   battleId: string;
   board: StoredBoard;
@@ -103,9 +156,24 @@ export function BattleBoard({
   opponentHp: number;
   opponentMaxHp: number;
   shield: number;
+  /** The bot shields itself too, so damage that vanishes has something to show for it. */
+  opponentShield: number;
+  /** The field this battle is on, or null in the ordinary mode. */
+  field: StoredField | null;
+  /** The shared drakofruta bars, and what a transformation costs. */
+  fruits: number;
+  rivalFruits: number;
+  fruitsToEvolve: number;
+  canEvolve: boolean;
   turn: number;
+  /** Moves left in this turn, and what a turn starts with. */
+  movesLeft: number;
+  movesPerTurn: number;
   team: TeamMember[];
   finished: boolean;
+  status: 'active' | 'won' | 'lost' | 'abandoned';
+  /** What clearing the wave paid, shown on the win screen. */
+  rewards: { coins: number };
 }) {
   const [state, moveAction, isMoving] = useActionState(playMoveAction, {
     ok: false,
@@ -113,6 +181,18 @@ export function BattleBoard({
   const [abandonState, abandon] = useActionState(abandonBattleAction, {
     ok: false,
   } satisfies BattleActionState);
+  const [, dismiss] = useActionState(dismissBattleAction, {
+    ok: false,
+  } satisfies BattleActionState);
+  /**
+   * The IN-BATTLE transformation: the shared fruit bar, spent on one creature
+   * for the rest of this fight. Not the permanent evolution — nothing here
+   * touches the creature row or the player's wallet.
+   */
+  const [evolveState, evolveNow] = useActionState(evolveInBattleAction, {
+    ok: false,
+  } satisfies BattleActionState);
+  const [ceremony, setCeremony] = useState<{ name: string; from: string } | null>(null);
 
   const nextId = useRef(1);
   const width = board.width;
@@ -146,6 +226,22 @@ export function BattleBoard({
     setGems(next);
   };
   const [replaying, setReplaying] = useState(false);
+  /** True while the BOT's moves are being replayed on this same board. */
+  const [rivalPlaying, setRivalPlaying] = useState(false);
+  /**
+   * The turn announcement.
+   *
+   * The bot plays the SAME board, so without a beat that says whose turn it is,
+   * gems start moving on their own and it reads as the game glitching rather
+   * than as an opponent taking its turn.
+   */
+  const [banner, setBanner] = useState<{ text: string; tone: 'foe' | 'mine' } | null>(null);
+  /**
+   * Cells a mine just took. Kept OUT of the replay on purpose: the explosion is
+   * not part of the move's cascade — it charged nobody — so it is drawn as a
+   * flash over the board the server already settled, not as another frame.
+   */
+  const [blast, setBlast] = useState<readonly number[]>([]);
   const [selected, setSelected] = useState<Cell | null>(null);
   const [drag, setDrag] = useState<{ ids: [number, number]; dx: number; dy: number } | null>(null);
   const dragStart = useRef<{ cell: Cell; x: number; y: number; size: number } | null>(null);
@@ -160,6 +256,95 @@ export function BattleBoard({
   /** The optimistic swap, so a refused move can spring back. */
   const pendingSwap = useRef<{ ids: [number, number]; cells: [Cell, Cell] } | null>(null);
   const boardSignature = board.tiles.join(',');
+
+  /**
+   * THE BARS FOLLOW THE ANIMATION, NOT THE SERVER.
+   *
+   * One request resolves your move AND the bot's answer, so the page re-renders
+   * with the final numbers at once: health dropped while the player was still
+   * looking at their own turn, with nothing on screen to explain it. These
+   * shown values stay where they were and take each hit at the moment it is
+   * animated, so a blow is something you WATCH land.
+   */
+  const [shown, setShown] = useState({ playerHp, opponentHp, shield, opponentShield, fruits, rivalFruits });
+  const shownRef = useRef(shown);
+  const showVitals = (next: {
+    playerHp: number;
+    opponentHp: number;
+    shield: number;
+    opponentShield: number;
+    fruits: number;
+    rivalFruits: number;
+  }): void => {
+    shownRef.current = next;
+    setShown(next);
+  };
+  /**
+   * Mana DRIVEN by the replay: it rises with the gems that charged it and drops
+   * to empty at the instant the special fires. Null means "whatever the server
+   * says", which is the truth whenever nothing is animating.
+   */
+  const [shownMana, setShownMana] = useState<Record<string, number> | null>(null);
+  const manaRef = useRef<Record<string, number> | null>(null);
+  const commitMana = (next: Record<string, number> | null): void => {
+    manaRef.current = next;
+    setShownMana(next);
+  };
+  const manaSnapshot = (): Record<string, number> => {
+    const snapshot: Record<string, number> = {};
+    for (const member of team) snapshot[member.creatureId] = member.mana;
+    for (const foe of rivals) snapshot[foe.id] = foe.mana;
+    return snapshot;
+  };
+  const manaOf = (id: string, current: number): number => shownMana?.[id] ?? current;
+
+  /**
+   * The bolt that leaves the creature that fired and strikes a life bar.
+   *
+   * A number going down is a fact; a bolt crossing the screen is an event. It is
+   * what ties "my bar filled" to "their health dropped" — otherwise the damage
+   * happens somewhere off screen and the player has to infer it.
+   */
+  const [shots, setShots] = useState<Shot[]>([]);
+  const shotKey = useRef(1);
+  /** Creatures mid-shot, and the bar taking the hit right now. */
+  const [firing, setFiring] = useState<string[]>([]);
+  const [hitSide, setHitSide] = useState<'foe' | 'mine' | null>(null);
+  const fighterNodes = useRef(new Map<string, HTMLDivElement | null>());
+  const foeBarRef = useRef<HTMLDivElement | null>(null);
+  const myBarRef = useRef<HTMLDivElement | null>(null);
+
+  const launchShot = (fromId: string, target: 'foe' | 'mine'): void => {
+    const source = fighterNodes.current.get(fromId)?.getBoundingClientRect();
+    const bar = (target === 'foe' ? foeBarRef : myBarRef).current?.getBoundingClientRect();
+    if (!source || !bar) return;
+
+    const key = shotKey.current++;
+    const startX = source.left + source.width / 2;
+    const startY = source.top + source.height / 2;
+    const shot: Shot = {
+      key,
+      x: startX,
+      y: startY,
+      dx: bar.left + bar.width / 2 - startX,
+      dy: bar.top + bar.height / 2 - startY,
+      /** Green leaves your side, red leaves theirs. */
+      tone: target === 'foe' ? 'mine' : 'foe',
+    };
+    setShots((current) => [...current, shot]);
+    window.setTimeout(
+      () => setShots((current) => current.filter((entry) => entry.key !== key)),
+      SHOT_MS + 200,
+    );
+  };
+
+  /** Adopt the server's numbers whenever nothing is being animated. */
+  useEffect(() => {
+    if (replaying || inFlight.current) return;
+    showVitals({ playerHp, opponentHp, shield, opponentShield, fruits, rivalFruits });
+    commitMana(null);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [playerHp, opponentHp, shield, opponentShield, fruits, rivalFruits, replaying]);
 
   /**
    * Adopt the server board whenever it changes and no replay is running: a new
@@ -188,6 +373,9 @@ export function BattleBoard({
     const swap = pendingSwap.current;
     pendingSwap.current = null;
     inFlight.current = false;
+    /** Nothing happened, so the bars go back to what the server says. */
+    showVitals({ playerHp, opponentHp, shield, opponentShield, fruits, rivalFruits });
+    commitMana(null);
     if (!swap) return;
 
     const [first, second] = swap.cells;
@@ -208,14 +396,19 @@ export function BattleBoard({
     if (playedRef.current === state) return;
     playedRef.current = state;
 
+    const rivalMoves = state.rival ?? [];
+
     /**
-     * A free swap: nothing cleared, so there is nothing to replay. The pair is
-     * already exchanged on screen. Adopt the server board only if it disagrees,
-     * so a correct optimistic swap is never cut short by a remount.
+     * A free swap with no answer yet: nothing cleared and the bot did not play,
+     * so there is nothing to replay. The pair is already exchanged on screen.
+     * Adopt the server board only if it disagrees, so a correct optimistic swap
+     * is never cut short by a remount.
      */
-    if (state.frames.length === 0) {
+    if (state.frames.length === 0 && rivalMoves.length === 0) {
       pendingSwap.current = null;
       inFlight.current = false;
+      showVitals({ playerHp, opponentHp, shield, opponentShield, fruits, rivalFruits });
+      commitMana(null);
       const shown = gemsRef.current;
       const agrees = board.tiles.every((kind, index) =>
         shown.some(
@@ -247,8 +440,153 @@ export function BattleBoard({
       pendingSwap.current = null;
       if (swapped) await sleep(SWAP_MS);
 
-      for (const frame of frames) {
+      const played = await playFrames(frames);
+      if (!played) return;
+
+      /** YOUR bars charge, fire, and the blow lands — in that order. */
+      const landed = await resolveAttacks(
+        state.attacks ?? [],
+        'foe',
+        state.damageToOpponent ?? 0,
+        state.healed ?? 0,
+      );
+      if (!landed) return;
+
+      /**
+       * 2. The BOT's turn, on this same board. It is ANNOUNCED and the board is
+       *    locked first, then its swap is shown — the two gems trading places —
+       *    and only then its cascade. Announcing it is not decoration: gems that
+       *    move with no input look like a bug unless the game says who is
+       *    moving them.
+       */
+      if (rivalMoves.length > 0) {
+        setRivalPlaying(true);
+        setBanner({ text: 'Turno del rival', tone: 'foe' });
+        await sleep(BANNER_MS);
         if (cancelled) return;
+        setBanner(null);
+      }
+
+      for (const rivalMove of rivalMoves) {
+        if (cancelled) return;
+
+        const here = gemsRef.current.find(
+          (gem) => !gem.dying && gem.row === rivalMove.from.row && gem.col === rivalMove.from.col,
+        );
+        const there = gemsRef.current.find(
+          (gem) => !gem.dying && gem.row === rivalMove.to.row && gem.col === rivalMove.to.col,
+        );
+        if (here && there) {
+          commit(
+            gemsRef.current.map((gem) =>
+              gem.id === here.id
+                ? { ...gem, row: rivalMove.to.row, col: rivalMove.to.col, fall: 0 }
+                : gem.id === there.id
+                  ? { ...gem, row: rivalMove.from.row, col: rivalMove.from.col, fall: 0 }
+                  : gem,
+            ),
+          );
+          await sleep(SWAP_MS + 140);
+        }
+
+        const answered = await playFrames(rivalMove.frames);
+        if (!answered) return;
+
+        /** And THIS is the hit the player was never shown: it lands here. */
+        const took = await resolveAttacks(
+          rivalMove.attacks ?? [],
+          'mine',
+          rivalMove.damageToPlayer,
+          0,
+        );
+        if (!took) return;
+      }
+
+      if (cancelled) return;
+
+      /** Handing the board back is announced too, so the lock lifting is legible. */
+      if (rivalMoves.length > 0) {
+        setRivalPlaying(false);
+        setBanner({ text: 'Tu turno', tone: 'mine' });
+        await sleep(BANNER_MS);
+        if (cancelled) return;
+        setBanner(null);
+      }
+
+      done = true;
+      /** Everything has been shown: settle on the server's numbers. */
+      showVitals({ playerHp, opponentHp, shield, opponentShield, fruits, rivalFruits });
+      commitMana(null);
+      /** Clear the guard first, so the sync effect can adopt the server board. */
+      inFlight.current = false;
+      setReplaying(false);
+    };
+
+    /**
+     * The bars and the blow, in an order a player can follow: gems charge the
+     * bar, a FULL bar fires a bolt at a life bar, and health drops when the bolt
+     * arrives. Returns false if the replay was cancelled underneath it.
+     */
+    const resolveAttacks = async (
+      attacks: readonly AttackView[],
+      target: 'foe' | 'mine',
+      damage: number,
+      healed: number,
+    ): Promise<boolean> => {
+      if (attacks.length > 0) {
+        /** 1. Every bar moves to where the gems left it — full, if it charged. */
+        const charged: Record<string, number> = {};
+        for (const attack of attacks) {
+          charged[attack.id] = attack.charged ? attack.manaCost : attack.manaAfter;
+        }
+        commitMana({ ...(manaRef.current ?? manaSnapshot()), ...charged });
+        await sleep(260);
+        if (cancelled) return false;
+      }
+
+      const fired = attacks.filter((attack) => attack.charged);
+      if (fired.length > 0) {
+        /** 2. The full bars discharge, and a bolt leaves each creature. */
+        setFiring(fired.map((attack) => attack.id));
+        for (const attack of fired) launchShot(attack.id, target);
+
+        const emptied: Record<string, number> = {};
+        for (const attack of fired) emptied[attack.id] = attack.manaAfter;
+        commitMana({ ...(manaRef.current ?? manaSnapshot()), ...emptied });
+
+        await sleep(SHOT_MS);
+        setFiring([]);
+        if (cancelled) return false;
+      }
+
+      if (damage > 0 || healed > 0) {
+        /** 3. The bolt arrives: the bar drops and flinches. */
+        showVitals({
+          ...shownRef.current,
+          playerHp: Math.max(
+            0,
+            Math.min(
+              playerMaxHp,
+              shownRef.current.playerHp + healed - (target === 'mine' ? damage : 0),
+            ),
+          ),
+          opponentHp: Math.max(0, shownRef.current.opponentHp - (target === 'foe' ? damage : 0)),
+        });
+        setHitSide(target);
+        await sleep(340);
+        setHitSide(null);
+        if (cancelled) return false;
+      }
+
+      return true;
+    };
+
+    /** One side's cascade: crush, then gravity. Returns false if it was cancelled. */
+    const playFrames = async (
+      frames: { cleared: number[]; tiles: string[] }[],
+    ): Promise<boolean> => {
+      for (const frame of frames) {
+        if (cancelled) return false;
 
         /** 2. Matched gems are crushed where they stand. */
         const goneCells = new Set(frame.cleared);
@@ -258,7 +596,7 @@ export function BattleBoard({
           ),
         );
         await sleep(CLEAR_MS);
-        if (cancelled) return;
+        if (cancelled) return false;
 
         /**
          * 3. Gravity, computed HERE — synchronously, from the ref — so the set
@@ -311,7 +649,7 @@ export function BattleBoard({
          */
         flushSync(() => commit([...moved.values(), ...born]));
         await nextFrame();
-        if (cancelled) return;
+        if (cancelled) return false;
 
         const newborn = new Set(born.map((gem) => gem.id));
         commit(
@@ -323,11 +661,7 @@ export function BattleBoard({
         await sleep(fallMs(longest));
       }
 
-      if (cancelled) return;
-      done = true;
-      /** Clear the guard first, so the sync effect can adopt the server board. */
-      inFlight.current = false;
-      setReplaying(false);
+      return !cancelled;
     };
 
     void run();
@@ -346,12 +680,24 @@ export function BattleBoard({
       if (!done) {
         inFlight.current = false;
         setReplaying(false);
+        setRivalPlaying(false);
+        setBanner(null);
       }
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [state, width, height]);
 
   const busy = isMoving || replaying || finished;
+
+  /**
+   * The result waits for the animation. The winning move's cascade is still
+   * running when the server answers, and covering it with a dialog would cut
+   * the ending off the very move that won.
+   */
+  const won = status === 'won';
+  const showResult = finished && status !== 'abandoned' && !replaying && !rivalPlaying;
+  /** The HUD counts the turn in progress as `turn + 1`; the result must agree. */
+  const turnsPlayed = turn + 1;
 
   /**
    * Sends the move AND swaps the two gems right away.
@@ -368,6 +714,8 @@ export function BattleBoard({
     if (here && there) {
       pendingSwap.current = { ids: [here.id, there.id], cells: [from, to] };
       inFlight.current = true;
+      /** Captured BEFORE the answer arrives: the server's reply is the spoiler. */
+      commitMana(manaSnapshot());
       commit(
         gemsRef.current.map((gem) =>
           gem.id === here.id
@@ -462,44 +810,118 @@ export function BattleBoard({
    * hearts at the top are the only lives in the battle. A bar under a creature
    * would say "kill this one", which is not the game.
    */
+  /**
+   * A mine went off: flash the hole it left for a moment. It is deliberately
+   * not queued behind the replay — the board the player is looking at is
+   * already the settled one, so the flash explains a change that has happened
+   * rather than pretending to cause it.
+   */
+  const detonated = state.ok ? state.detonated : undefined;
+  useEffect(() => {
+    if (!detonated || detonated.length === 0) return;
+    setBlast(detonated);
+    const timer = setTimeout(() => setBlast([]), 900);
+    return () => clearTimeout(timer);
+  }, [detonated]);
+
+  const fieldLabel = field ? FIELD_LABELS[field.kind] : null;
+
   return (
     <div className="battle">
       <div className="hud">
         <span className="hud-side">
-          <span className="hud-heart">❤</span> {opponentHp}/{opponentMaxHp}
+          <span className="hud-heart">❤</span> {shown.opponentHp}/{opponentMaxHp}
+          {shown.opponentShield > 0 ? (
+            <span className="hud-shield"> 🛡 {shown.opponentShield}</span>
+          ) : null}
         </span>
-        <span className="hud-turn">turno {turn}</span>
+        <span className={`hud-turn${rivalPlaying ? ' hud-turn-foe' : ''}`}>
+          {rivalPlaying ? (
+            'juega el rival…'
+          ) : (
+            <>
+              turno {turn + 1}
+              {/* Pips, not a fraction: how many moves are left should be countable at a glance. */}
+              <span className="moves-pips" aria-label={`te quedan ${movesLeft} jugadas`}>
+                {Array.from({ length: Math.max(movesPerTurn, movesLeft) }, (_, index) => (
+                  <span key={index} className={`pip${index < movesLeft ? ' pip-on' : ''}`} />
+                ))}
+              </span>
+            </>
+          )}
+        </span>
         <span className="hud-side hud-right">
-          {playerHp}/{playerMaxHp} <span className="hud-heart">❤</span>
-          {shield > 0 ? <span className="hud-shield"> 🛡 {shield}</span> : null}
+          {shown.playerHp}/{playerMaxHp} <span className="hud-heart">❤</span>
+          {shown.shield > 0 ? <span className="hud-shield"> 🛡 {shown.shield}</span> : null}
         </span>
       </div>
 
       <div className="lifebars">
-        <div className="bar">
+        <div className={`bar${hitSide === 'foe' ? ' bar-hit' : ''}`} ref={foeBarRef}>
           <div
             className="bar-fill"
             style={{
-              width: `${Math.max(0, Math.round((opponentHp / opponentMaxHp) * 100))}%`,
+              width: `${Math.max(0, Math.round((shown.opponentHp / opponentMaxHp) * 100))}%`,
               background: 'var(--danger)',
             }}
           />
         </div>
-        <div className="bar">
+        <div className={`bar${hitSide === 'mine' ? ' bar-hit' : ''}`} ref={myBarRef}>
           <div
             className="bar-fill bar-fill-right"
             style={{
-              width: `${Math.max(0, Math.round((playerHp / playerMaxHp) * 100))}%`,
+              width: `${Math.max(0, Math.round((shown.playerHp / playerMaxHp) * 100))}%`,
               background: 'var(--ok)',
             }}
           />
         </div>
       </div>
 
+      {/*
+        * The fruit both sides are fighting over. It sits between the health and
+        * the board because that is what it is: the board's business, not a stat.
+        */}
+      <div className="fruitbars">
+        <span className="fruit-count">
+          {shown.rivalFruits}/{fruitsToEvolve}
+        </span>
+        <div className="bar bar-fruit">
+          <div
+            className="bar-fill"
+            style={{
+              width: `${Math.min(100, Math.round((shown.rivalFruits / fruitsToEvolve) * 100))}%`,
+              background: 'var(--danger)',
+            }}
+          />
+        </div>
+        <span className="fruit-mark" aria-hidden="true">
+          🐉
+        </span>
+        <div className="bar bar-fruit">
+          <div
+            className="bar-fill bar-fill-right"
+            style={{
+              width: `${Math.min(100, Math.round((shown.fruits / fruitsToEvolve) * 100))}%`,
+              background: 'var(--fruit)',
+            }}
+          />
+        </div>
+        <span className="fruit-count">
+          {shown.fruits}/{fruitsToEvolve}
+        </span>
+      </div>
+
       <div className="arena">
-        <div className="arena-team arena-foes">
+        {/* The side that is playing right now is lit; the other one dims. */}
+        <div className={`arena-team arena-foes${rivalPlaying ? ' arena-active' : ''}`}>
           {rivals.map((foe) => (
-            <div className="fighter fighter-foe" key={foe.id}>
+            <div
+              className={`fighter fighter-foe${firing.includes(foe.id) ? ' fighter-firing' : ''}`}
+              key={foe.id}
+              ref={(node) => {
+                fighterNodes.current.set(foe.id, node);
+              }}
+            >
               <CreatureArt
                 element={foe.element as ArtElement}
                 name={foe.name}
@@ -508,95 +930,307 @@ export function BattleBoard({
               <span className="fighter-name">{foe.name}</span>
               <span className="fighter-stat">
                 <span className={`tag tag-${foe.element}`}>{foe.element}</span> pega {foe.attack}
+                {/* A rival has no evolved form to wear, so it says so instead. */}
+                {foe.evolvedInBattle ? <span className="fruit-mark">✦</span> : null}
               </span>
+              {/* The rival charges a bar too, and only hits when it fills. */}
+              <Bar value={manaOf(foe.id, foe.mana)} max={foe.manaCost} tone="var(--mana)" />
             </div>
           ))}
         </div>
 
         <div className="arena-vs">VS</div>
 
-        <div className="arena-team arena-mine">
+        <div className={`arena-team arena-mine${!rivalPlaying && !finished ? ' arena-active' : ''}`}>
           {team.map((member) => (
-            <div className="fighter" key={member.creatureId}>
+            <div
+              className={`fighter${firing.includes(member.creatureId) ? ' fighter-firing' : ''}`}
+              key={member.creatureId}
+              ref={(node) => {
+                fighterNodes.current.set(member.creatureId, node);
+              }}
+            >
               <CreatureArt
-                element={member.element as ArtElement}
+                element={(member.evolvedElement ?? member.element) as ArtElement}
                 name={member.name}
                 className="fighter-art"
               />
-              <span className="fighter-name">{member.name}</span>
-              <Bar value={member.mana} max={member.manaCost} tone="var(--mana)" />
+              <span className="fighter-name">
+                {member.name}
+                {member.isExcellent ? <span className="excellent-mark">✦</span> : null}
+              </span>
+              <Bar
+                value={manaOf(member.creatureId, member.mana)}
+                max={member.manaCost}
+                tone="var(--mana)"
+              />
             </div>
           ))}
         </div>
       </div>
+
+      {canEvolve && !replaying && !rivalPlaying && !finished && !ceremony ? (
+        <div className="card evo-choice">
+          <strong>✦ Barra de drakofruta llena</strong>
+          <span className="small muted">
+            Elige a quién transformar. Dura hasta el final de esta partida.
+          </span>
+          <div className="evo-choice-options">
+            {team
+              .filter((member) => !member.evolvedInBattle)
+              .map((member) => (
+                <form
+                  action={evolveNow}
+                  key={member.creatureId}
+                  onSubmit={() =>
+                    setCeremony({
+                      name: member.name,
+                      from: member.evolvedElement ?? member.element,
+                    })
+                  }
+                >
+                  <input type="hidden" name="battleId" value={battleId} />
+                  <input type="hidden" name="creatureId" value={member.creatureId} />
+                  <button className="btn-primary" type="submit">
+                    Transformar a {member.name}
+                  </button>
+                </form>
+              ))}
+          </div>
+        </div>
+      ) : null}
 
       {state.message ? (
         <p className={`notice ${state.ok ? 'notice-ok' : 'notice-error'}`}>{state.message}</p>
       ) : null}
       {abandonState.message ? <p className="notice">{abandonState.message}</p> : null}
 
-      <div
-        className="board"
-        style={
-          {
-            '--cols': width,
-            '--rows': height,
-            aspectRatio: `${width} / ${height}`,
-          } as React.CSSProperties
-        }
-        onPointerLeave={endDrag}
-      >
-        {gems.map((gem) => {
-          const dragged = drag?.ids[0] === gem.id;
-          const partner = drag?.ids[1] === gem.id;
-          const nudgeX = dragged ? (drag?.dx ?? 0) : partner ? -(drag?.dx ?? 0) : 0;
-          const nudgeY = dragged ? (drag?.dy ?? 0) : partner ? -(drag?.dy ?? 0) : 0;
-          const isSelected =
-            selected?.row === gem.row && selected?.col === gem.col && !busy && !gem.dying;
+      {/*
+       * WHAT GROUND ARE WE ON. It is printed before the first move and it stays
+       * there: a rule the player has to remember is a rule they will forget,
+       * and "why did the board just shuffle" must never be a question.
+       */}
+      {fieldLabel ? (
+        <p className="field-tag">
+          <span className="field-icon" aria-hidden="true">
+            {fieldLabel.icon}
+          </span>
+          <strong>{fieldLabel.name}</strong>
+          <span className="small muted"> {fieldLabel.rule}</span>
+        </p>
+      ) : null}
 
-          return (
-            <button
-              key={gem.id}
-              type="button"
-              className={[
-                'gem-tile',
-                gem.dying ? 'gem-dying' : '',
-                isSelected ? 'gem-selected' : '',
-                dragged || partner ? 'gem-nudged' : '',
-              ]
-                .filter(Boolean)
-                .join(' ')}
+      <div className="board-stage">
+        <div
+          className={`board${rivalPlaying ? ' board-locked' : ''}`}
+          style={
+            {
+              '--cols': width,
+              '--rows': height,
+              aspectRatio: `${width} / ${height}`,
+            } as React.CSSProperties
+          }
+          aria-disabled={rivalPlaying}
+          onPointerLeave={endDrag}
+        >
+          {gems.map((gem) => {
+            const dragged = drag?.ids[0] === gem.id;
+            const partner = drag?.ids[1] === gem.id;
+            const nudgeX = dragged ? (drag?.dx ?? 0) : partner ? -(drag?.dx ?? 0) : 0;
+            const nudgeY = dragged ? (drag?.dy ?? 0) : partner ? -(drag?.dy ?? 0) : 0;
+            const isSelected =
+              selected?.row === gem.row && selected?.col === gem.col && !busy && !gem.dying;
+
+            return (
+              <button
+                key={gem.id}
+                type="button"
+                className={[
+                  'gem-tile',
+                  gem.dying ? 'gem-dying' : '',
+                  isSelected ? 'gem-selected' : '',
+                  dragged || partner ? 'gem-nudged' : '',
+                ]
+                  .filter(Boolean)
+                  .join(' ')}
+                style={
+                  {
+                    '--col': gem.col,
+                    '--row': gem.row,
+                    '--nudge-x': `${nudgeX}px`,
+                    '--nudge-y': `${nudgeY}px`,
+                    '--move-ms': `${gem.fall > 0 ? fallMs(gem.fall) : SWAP_MS}ms`,
+                  } as React.CSSProperties
+                }
+                onPointerDown={(event) => onPointerDown({ row: gem.row, col: gem.col }, event)}
+                onPointerMove={onPointerMove}
+                onPointerUp={endDrag}
+                onPointerCancel={endDrag}
+                onClick={() => onTap({ row: gem.row, col: gem.col })}
+                disabled={finished || gem.dying}
+                aria-label={`fila ${gem.row}, columna ${gem.col}, ${gem.kind}`}
+              >
+                <Gem kind={gem.kind as GemKind} className="gem" />
+              </button>
+            );
+          })}
+          {/*
+            * THE MINES SIT ON CELLS, NOT ON TILES.
+            *
+            * Gems fall through a mine; it stays where it was laid. That is why
+            * it is drawn here as its own layer instead of on a gem: a fuse that
+            * travelled with a tile would need threading through gravity, and a
+            * mine that moved when the board fell would be unreadable anyway.
+            */}
+          {(field?.bombs ?? []).map((bomb) => (
+            <span
+              key={`bomb-${bomb.at}`}
+              className="mine"
               style={
                 {
-                  '--col': gem.col,
-                  '--row': gem.row,
-                  '--nudge-x': `${nudgeX}px`,
-                  '--nudge-y': `${nudgeY}px`,
-                  '--move-ms': `${gem.fall > 0 ? fallMs(gem.fall) : SWAP_MS}ms`,
+                  '--col': bomb.at % width,
+                  '--row': Math.floor(bomb.at / width),
                 } as React.CSSProperties
               }
-              onPointerDown={(event) => onPointerDown({ row: gem.row, col: gem.col }, event)}
-              onPointerMove={onPointerMove}
-              onPointerUp={endDrag}
-              onPointerCancel={endDrag}
-              onClick={() => onTap({ row: gem.row, col: gem.col })}
-              disabled={finished || gem.dying}
-              aria-label={`fila ${gem.row}, columna ${gem.col}, ${gem.kind}`}
+              aria-label={`mina en la fila ${Math.floor(bomb.at / width)}, columna ${bomb.at % width}: ${bomb.fuse}`}
             >
-              <Gem kind={gem.kind as GemKind} className="gem" />
-            </button>
-          );
-        })}
+              {bomb.fuse}
+            </span>
+          ))}
+
+          {blast.map((cell) => (
+            <span
+              key={`blast-${cell}`}
+              className="blast"
+              style={
+                {
+                  '--col': cell % width,
+                  '--row': Math.floor(cell / width),
+                } as React.CSSProperties
+              }
+            />
+          ))}
+        </div>
+
+        {/*
+          * The lock is a THING ON THE BOARD, not just dead input: a player who
+          * taps during the rival's turn must see why nothing happened.
+          */}
+        {rivalPlaying ? (
+          <div className="board-lock">
+            <span className="board-lock-text">🔒 Juega el rival</span>
+          </div>
+        ) : null}
+
+        {banner ? (
+          <p className={`turn-banner turn-banner-${banner.tone}`} role="status">
+            {banner.text}
+          </p>
+        ) : null}
       </div>
 
-      <p className="small muted board-hint">
-        Arrastra una gema hacia su vecina. También puedes tocar una y luego la otra.
-      </p>
+      {finished ? null : (
+        <>
+          <p className="small muted board-hint">
+            Arrastra una gema hacia su vecina. También puedes tocar una y luego la otra.
+          </p>
 
-      <form action={abandon}>
-        <input type="hidden" name="battleId" value={battleId} />
-        <AbandonButton />
-      </form>
+          <form action={abandon}>
+            <input type="hidden" name="battleId" value={battleId} />
+            <AbandonButton />
+          </form>
+        </>
+      )}
+
+      {/*
+       * THE RESULT IS ANNOUNCED BEFORE THE SCREEN CHANGES.
+       *
+       * It waits for the replay to finish — being told you won while gems are
+       * still falling robs the move of its ending — and it only leaves when the
+       * player closes it, because the server marks the row as acknowledged.
+       */}
+      {/* The transformation takes the screen, exactly like the permanent one. */}
+      {ceremony ? (
+        <div className="evo-veil" role="dialog" aria-modal="true" aria-label="Transformación">
+          <div className={`evo-stage${evolveState.ok ? ' evo-stage-done' : ''}`}>
+            <span className="evo-rays" aria-hidden="true" />
+            <span className="evo-burst" aria-hidden="true" />
+
+            <CreatureArt
+              element={
+                (evolveState.ok
+                  ? (evolveState.evolvedInBattle?.element ?? ceremony.from)
+                  : ceremony.from) as ArtElement
+              }
+              name={ceremony.name}
+              className="evo-art"
+            />
+
+            <p className="evo-title">
+              {evolveState.ok
+                ? `¡${ceremony.name} es ahora ${evolveState.evolvedInBattle?.element ?? 'otra'}!`
+                : `${ceremony.name} está cambiando…`}
+            </p>
+            <p className="small muted">Solo por esta partida.</p>
+
+            {evolveState.message && !evolveState.ok ? (
+              <p className="notice notice-error">{evolveState.message}</p>
+            ) : null}
+
+            {evolveState.ok || (evolveState.message && !evolveState.ok) ? (
+              <button className="btn-primary" type="button" onClick={() => setCeremony(null)}>
+                Seguir
+              </button>
+            ) : null}
+          </div>
+        </div>
+      ) : null}
+
+      {/* Bolts in flight, over everything: they cross from a creature to a bar. */}
+      {shots.map((shot) => (
+        <span
+          key={shot.key}
+          className={`shot shot-${shot.tone}`}
+          style={
+            {
+              left: `${shot.x}px`,
+              top: `${shot.y}px`,
+              '--dx': `${shot.dx}px`,
+              '--dy': `${shot.dy}px`,
+            } as React.CSSProperties
+          }
+        />
+      ))}
+
+      {showResult ? (
+        <div className="result-veil" role="dialog" aria-modal="true" aria-label="Resultado">
+          <div className="card result-card">
+            <p className={`result-title ${won ? 'result-won' : 'result-lost'}`}>
+              {won ? '¡GANASTE!' : 'PERDISTE'}
+            </p>
+            <p className="small muted">
+              {won
+                ? `Dejaste al rival sin vida en ${turnsPlayed} turno${turnsPlayed === 1 ? '' : 's'}.`
+                : `Te quedaste sin vida en ${turnsPlayed} turno${turnsPlayed === 1 ? '' : 's'}.`}
+            </p>
+            {won && rewards.coins > 0 ? (
+              <p className="result-rewards">
+                <span>🪙 +{rewards.coins} monedas</span>
+              </p>
+            ) : null}
+            {won ? (
+              <p className="small muted">Las monedas compran huevos en la tienda.</p>
+            ) : (
+              <p className="small muted">Tus kriaturas no se pierden. Prueba con otro equipo.</p>
+            )}
+
+            <form action={dismiss}>
+              <input type="hidden" name="battleId" value={battleId} />
+              <DismissButton label={won ? 'Seguir' : 'Volver a intentarlo'} />
+            </form>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }

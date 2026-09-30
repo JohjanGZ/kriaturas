@@ -30,6 +30,45 @@ export class AdminAccessError extends Error {
   }
 }
 
+/**
+ * Writes the session cookie.
+ *
+ * Callable ONLY from a server action or a route handler — a page render cannot
+ * set a cookie in the App Router, which is exactly why entering is a button and
+ * not something that happens silently while a page loads. That turns out to be
+ * the right shape anyway: a crawler that opens the link does not mint an
+ * account, only somebody who chose to play does.
+ *
+ * `httpOnly` so no script can read it, `sameSite: lax` so it survives following
+ * a shared link, and `secure` off localhost so it is never sent in the clear.
+ */
+export async function setSession(userId: string): Promise<void> {
+  const jar = await cookies();
+  jar.set(SESSION_COOKIE, userId, {
+    httpOnly: true,
+    sameSite: 'lax',
+    secure: process.env.NODE_ENV === 'production',
+    path: '/',
+    maxAge: 60 * 60 * 24 * 365,
+  });
+}
+
+export async function clearSession(): Promise<void> {
+  const jar = await cookies();
+  jar.delete(SESSION_COOKIE);
+}
+
+/**
+ * Is the placeholder identity still in play?
+ *
+ * Local development falls back to the seeded admin, so there is nothing to
+ * enter. A deployed server has no fallback, and this is what the pages ask
+ * before sending somebody to the door rather than showing them an empty game.
+ */
+export function hasDevFallback(): boolean {
+  return process.env.NODE_ENV !== 'production';
+}
+
 export async function getCurrentUser(): Promise<UserRow | null> {
   const db = await getDb();
   const jar = await cookies();

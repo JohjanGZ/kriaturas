@@ -1,6 +1,15 @@
 import { describe, expect, it } from 'vitest';
 import type { Effect } from '@/core/effects/schema';
-import { type Combatant, chargeMana, parseBoard, resolveMove, resolveTurn } from '@/core/match3';
+import {
+  BOARD_TILE_KINDS,
+  type Combatant,
+  chargeMana,
+  manaGainedFor,
+  parseBoard,
+  resolveMove,
+  resolveTurn,
+  startingMana,
+} from '@/core/match3';
 import type { CombatConfig } from '@/core/schemas/config';
 
 const combat: CombatConfig = {
@@ -11,9 +20,27 @@ const combat: CombatConfig = {
   maxCascades: 20,
   playerMaxHp: 100,
   allowFreeSwaps: true,
+  damageOnlyOnSpecial: true,
+  manaPerGem: 1,
+  manaBonusPerExtraGem: 2,
+  botEnabled: true,
+  botSkill: 0.75,
+  movesPerTurn: 2,
+  extraMoveMinRun: 4,
+  extraMovesPerTurn: 1,
+  startingManaPercent: 40,
+  rivalManaCostPercent: 70,
+  fruitsToEvolve: 6,
+  tileWeights: { fire: 4, water: 4, plant: 4, psychic: 4, food: 3, drakofruta: 2 },
 };
 
-const alwaysFood = (): number => 0.99;
+/**
+ * Deterministic refills. `applyGravity` picks kinds[floor(r * kinds.length)],
+ * so this aims the source at FOOD — and keeps aiming there now that drakofruta
+ * has joined the bag, instead of silently refilling with the new tile.
+ */
+const alwaysFood = (): number =>
+  (BOARD_TILE_KINDS.indexOf('food') + 0.5) / BOARD_TILE_KINDS.length;
 
 /** Clears exactly three fire gems, no cascade. */
 function fireMatch() {
@@ -46,7 +73,7 @@ const combatant = (over: Partial<Combatant> = {}): Combatant => ({
 });
 
 const turn = (team: readonly Combatant[]) =>
-  resolveTurn({ move: fireMatch(), team, enemyElement: 'water', config: combat });
+  resolveTurn({ move: fireMatch(), team, enemyElements: ['water'], config: combat });
 
 describe('chargeMana', () => {
   it('accumulates without firing while the bar is short', () => {
@@ -76,16 +103,66 @@ describe('chargeMana', () => {
   });
 });
 
-describe('resolveTurn — basic attack and special', () => {
-  it('attacks on every match even with the bar unfilled, but without effects', () => {
+describe('manaGainedFor — longer runs are worth more', () => {
+  it('pays one per gem for a minimum-length run', () => {
+    expect(manaGainedFor({ gemsCleared: 3, longestRun: 3 }, combat)).toBe(3);
+  });
+
+  it('pays a bonus for every gem beyond the minimum', () => {
+    // 5 gems x 1, plus 2 gems past the minimum x 2.
+    expect(manaGainedFor({ gemsCleared: 5, longestRun: 5 }, combat)).toBe(9);
+  });
+
+  it('a five-run beats a three-run plus two loose gems of the same element', () => {
+    const five = manaGainedFor({ gemsCleared: 5, longestRun: 5 }, combat);
+    const scattered = manaGainedFor({ gemsCleared: 5, longestRun: 3 }, combat);
+    expect(five).toBeGreaterThan(scattered);
+  });
+
+  it('charges nothing when nothing was cleared', () => {
+    expect(manaGainedFor({ gemsCleared: 0, longestRun: 0 }, combat)).toBe(0);
+  });
+});
+
+describe('startingMana — the opening pays immediately', () => {
+  it('fills the configured share of the bar', () => {
+    expect(startingMana(10, combat)).toBe(4);
+    expect(startingMana(5, combat)).toBe(2);
+  });
+
+  it('can still start empty', () => {
+    expect(startingMana(10, { ...combat, startingManaPercent: 0 })).toBe(0);
+  });
+
+  it('never hands out more than one full bar', () => {
+    expect(startingMana(10, { ...combat, startingManaPercent: 100 })).toBe(10);
+  });
+});
+
+describe('resolveTurn — a match is not an attack', () => {
+  it('deals NO damage while the bar is unfilled: the gems only charge it', () => {
     const outcome = turn([combatant({ mana: 0, manaCost: 6 })]);
     const attack = outcome.attacks[0];
 
     expect(attack?.charged).toBe(false);
-    expect(attack?.basicDamage).toBeGreaterThan(0); // the player is never idle
+    /** The whole point: clearing gems is an investment, not a hit. */
+    expect(attack?.basicDamage).toBe(0);
     expect(attack?.effectDamage).toBe(0);
-    expect(attack?.heal).toBe(0);
+    expect(attack?.totalDamage).toBe(0);
+    expect(outcome.totalDamage).toBe(0);
+    expect(attack?.manaAfter).toBeGreaterThan(0); // but the bar did move
     expect(outcome.specialsFired).toEqual([]);
+  });
+
+  it('still hits on every match when damageOnlyOnSpecial is switched off', () => {
+    const outcome = resolveTurn({
+      move: fireMatch(),
+      team: [combatant({ mana: 0, manaCost: 6 })],
+      enemyElements: ['water'],
+      config: { ...combat, damageOnlyOnSpecial: false },
+    });
+    expect(outcome.attacks[0]?.charged).toBe(false);
+    expect(outcome.attacks[0]?.basicDamage).toBeGreaterThan(0);
   });
 
   it('fires the special when the gems fill the bar, and the attack carries the effect', () => {
@@ -94,8 +171,9 @@ describe('resolveTurn — basic attack and special', () => {
 
     expect(attack?.charged).toBe(true);
     expect(attack?.basicDamage).toBeGreaterThan(0);
-    expect(attack?.effectDamage).toBe(50);
-    expect(attack?.totalDamage).toBe((attack?.basicDamage ?? 0) + 50);
+    /** The special is a `damage` effect: it pierces, so it rides its own channel. */
+    expect(attack?.pierceDamage).toBe(50);
+    expect(attack?.totalDamage).toBe(attack?.basicDamage);
     expect(attack?.heal).toBe(20);
     expect(outcome.specialsFired).toEqual(['c1']);
   });
@@ -132,10 +210,11 @@ describe('resolveTurn — basic attack and special', () => {
     expect(outcome.specialsFired).toEqual(['cheap']);
     const cheap = outcome.attacks.find((a) => a.creatureId === 'cheap');
     const pricey = outcome.attacks.find((a) => a.creatureId === 'pricey');
-    expect(cheap?.effectDamage).toBe(50);
-    expect(pricey?.effectDamage).toBe(0);
-    // Both still landed their basic attack.
-    expect(pricey?.basicDamage).toBeGreaterThan(0);
+    expect(cheap?.pierceDamage).toBe(50);
+    expect(pricey?.pierceDamage).toBe(0);
+    // The one that did not fill its bar dealt nothing at all.
+    expect(pricey?.basicDamage).toBe(0);
+    expect(pricey?.totalDamage).toBe(0);
   });
 
   it('a team of two with different elements charges independently', () => {

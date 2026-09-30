@@ -10,9 +10,12 @@ out/
 build/
 next-env.d.ts
 
-# local embedded database (PGlite)
+# local embedded database (PGlite) — the live one, the throwaway one used by
+# headless checks, and any copy moved aside after a corruption.
 .pglite/
+.pglite-check/
 .pglite.broken/
+.pglite.roto-*/
 
 # local uploads (until R2)
 public/uploads/*

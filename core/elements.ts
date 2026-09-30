@@ -25,9 +25,13 @@ export type EvolvedElement = (typeof EVOLVED_ELEMENTS)[number];
 export type Element = (typeof ELEMENTS)[number];
 
 /**
- * The four canonical pairs. These are the DEFAULT evolution path created for a
- * new species and the value the admin form prefills — not a hard constraint on
- * what a species may offer.
+ * The four canonical pairs — now the SUPERIOR element, reachable only by an
+ * EXCELLENT creature.
+ *
+ * An ordinary creature evolves inside its own element (fire stays fire, bigger
+ * and harder-hitting). An excellent one crosses over: fire becomes light, plant
+ * becomes poison. That is the whole reward of rarity, and it is why the table
+ * below stopped being "the default path" and became "the prize".
  */
 export const CANONICAL_EVOLUTIONS = {
   fire: 'light',
@@ -35,6 +39,24 @@ export const CANONICAL_EVOLUTIONS = {
   plant: 'poison',
   psychic: 'astral',
 } as const satisfies Record<BaseElement, EvolvedElement>;
+
+/** The element an EXCELLENT creature of this base element transforms into. */
+export function superiorElementFor(base: BaseElement): EvolvedElement {
+  return CANONICAL_EVOLUTIONS[base];
+}
+
+/**
+ * Which grade a path is, derived from where it points — no column needed.
+ *
+ * A path that targets a BASE element is the ordinary evolution (same element,
+ * better stats); one that targets an evolved element is the superior form, and
+ * only an excellent creature may take it.
+ */
+export type PathTier = 'normal' | 'superior';
+
+export function pathTier(target: Element): PathTier {
+  return isBaseElement(target) ? 'normal' : 'superior';
+}
 
 export function isBaseElement(value: Element): value is BaseElement {
   return (BASE_ELEMENTS as readonly string[]).includes(value);
@@ -62,5 +84,36 @@ export function triggerElementFor(speciesBaseElement: BaseElement): BaseElement 
 }
 
 export const baseElementSchema = z.enum(BASE_ELEMENTS);
+
+/**
+ * THE ELEMENT A CREATURE FIGHTS WITH — the one gem on the board that charges it.
+ *
+ * Almost always its species'. The exception is the ELEMENTLESS species: it has
+ * none of its own, is born white, and a stone writes one onto the creature. So
+ * the creature's own element wins when it has one, and the species' answers
+ * otherwise.
+ *
+ * It can return NULL, and that null is the whole mechanic: a creature no gem
+ * triggers cannot fight — it would stand there for a whole battle charging
+ * nothing — so `startBattle` refuses one rather than letting it be dead weight
+ * on the team.
+ */
+export function resolveElement(
+  speciesBaseElement: string | null | undefined,
+  creatureElement: string | null | undefined,
+): BaseElement | null {
+  const wanted = creatureElement ?? speciesBaseElement ?? null;
+  return wanted !== null && (BASE_ELEMENTS as readonly string[]).includes(wanted)
+    ? (wanted as BaseElement)
+    : null;
+}
+
+/** Can this creature be taken into a battle at all? */
+export function canFight(
+  speciesBaseElement: string | null | undefined,
+  creatureElement: string | null | undefined,
+): boolean {
+  return resolveElement(speciesBaseElement, creatureElement) !== null;
+}
 export const evolvedElementSchema = z.enum(EVOLVED_ELEMENTS);
 export const elementSchema = z.enum(ELEMENTS);

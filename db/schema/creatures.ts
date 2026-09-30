@@ -1,6 +1,7 @@
 import { sql } from 'drizzle-orm';
 import { boolean, check, index, pgTable, text, uuid } from 'drizzle-orm/pg-core';
 import { timestamps, tstz } from './_shared';
+import { elementEnum } from './enums';
 import { evolutionPaths } from './evolution';
 import { players } from './players';
 import { species } from './species';
@@ -47,6 +48,21 @@ export const creatures = pgTable(
 
     nickname: text('nickname'),
 
+    /**
+     * THE ELEMENT A STONE GAVE IT. Null for every ordinary creature, whose
+     * element comes from its species.
+     *
+     * It only ever matters for an ELEMENTLESS species: that one is born white
+     * and cannot fight at all until this is set, because a creature with no
+     * element is triggered by no gem on the board — it would stand there for
+     * the whole battle charging nothing. `startBattle` refuses one.
+     *
+     * Written once, like the evolution path: awakening is a decision, not a
+     * setting.
+     */
+    element: elementEnum('element'),
+    awakenedAt: tstz('awakened_at'),
+
     /** The locked-in evolution. Set once, before or at evolution time. */
     evolutionPathId: uuid('evolution_path_id').references(() => evolutionPaths.id, {
       onDelete: 'restrict',
@@ -55,6 +71,13 @@ export const creatures = pgTable(
     evolutionChosenAt: tstz('evolution_chosen_at'),
 
     isEvolved: boolean('is_evolved').notNull().default(false),
+    /**
+     * EXCELLENT — the rare mark, decided when the creature is born and never
+     * removed. It changes ONE thing: the in-battle transformation takes the
+     * SUPERIOR path (fire -> light) instead of the ordinary one (fire -> fire),
+     * with better stats. Everything else about the creature is the same.
+     */
+    isExcellent: boolean('is_excellent').notNull().default(false),
     evolvedAt: tstz('evolved_at'),
 
     /** Stamina regeneration anchor. See the note above. */
@@ -66,6 +89,12 @@ export const creatures = pgTable(
     index('creatures_player_id_idx').on(t.playerId),
     index('creatures_species_id_idx').on(t.speciesId),
     index('creatures_evolution_path_idx').on(t.evolutionPathId),
+    check(
+      'creatures_awakened_state_consistent',
+      sql`(${t.element} is null and ${t.awakenedAt} is null)
+          or (${t.element} is not null and ${t.awakenedAt} is not null
+              and ${t.element} in ('fire', 'water', 'plant', 'psychic'))`,
+    ),
     check(
       'creatures_evolved_state_consistent',
       sql`(${t.isEvolved} = false and ${t.evolvedAt} is null)

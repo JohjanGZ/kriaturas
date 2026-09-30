@@ -30,6 +30,7 @@ const emptyTally = (): Record<BoardTileKind, number> => ({
   plant: 0,
   psychic: 0,
   food: 0,
+  drakofruta: 0,
 });
 
 /** Every horizontal and vertical run of at least `minLength` equal tiles. */
@@ -235,6 +236,44 @@ export function resolveMove(
     cascades: Math.max(0, steps.length - 1),
     settled: runs.length === 0,
   };
+}
+
+/**
+ * Turns `count` tiles into `kind` — the `convert_tiles` power.
+ *
+ * Cells are picked at random, and a pick is REFUSED if it would complete a run:
+ * the board must still be settled when the player looks at it, or the next move
+ * resolves alignments nobody made. So the power stacks the deck without playing
+ * the hand.
+ */
+export function convertTiles(
+  board: Board,
+  kind: BoardTileKind,
+  count: number,
+  minMatchLength: number,
+  random: () => number,
+): { board: Board; changed: number[] } {
+  const tiles = [...board.tiles];
+  const changed: number[] = [];
+  const cells = tiles.length;
+  /** Bounded: a board that cannot take more of this kind must not spin here. */
+  const attempts = cells * 4;
+
+  for (let tries = 0; tries < attempts && changed.length < count; tries += 1) {
+    const index = Math.min(cells - 1, Math.floor(random() * cells));
+    if (tiles[index] === kind) continue;
+
+    const before = tiles[index];
+    tiles[index] = kind;
+    const candidate: Board = { ...board, tiles };
+    if (findRuns(candidate, minMatchLength).length > 0) {
+      tiles[index] = before as BoardTileKind;
+      continue;
+    }
+    changed.push(index);
+  }
+
+  return { board: { ...board, tiles }, changed };
 }
 
 /**

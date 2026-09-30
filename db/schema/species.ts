@@ -31,8 +31,18 @@ export const species = pgTable(
     name: text('name').notNull(),
     slug: text('slug').notNull(),
 
-    /** One of: fire, water, plant, psychic. Immutable once creatures exist. */
-    baseElement: elementEnum('base_element').notNull(),
+    /**
+     * One of: fire, water, plant, psychic — or NULL.
+     *
+     * Null means the species has NO element of its own: it is born white and a
+     * stone decides what it becomes, per creature (`creatures.element`). That is
+     * why this is a nullable column rather than a fifth enum value: "no element"
+     * is an absence, not a kind, and a placeholder element would make the thing
+     * playable and trigger it on the board — exactly what must not happen.
+     *
+     * Immutable once creatures exist, null or not.
+     */
+    baseElement: elementEnum('base_element'),
 
     baseImagePath: text('base_image_path'),
 
@@ -66,7 +76,7 @@ export const species = pgTable(
     index('species_is_published_idx').on(t.isPublished),
     check(
       'species_base_element_is_base',
-      sql`${t.baseElement} in ('fire', 'water', 'plant', 'psychic')`,
+      sql`${t.baseElement} is null or ${t.baseElement} in ('fire', 'water', 'plant', 'psychic')`,
     ),
     check('species_base_hp_positive', sql`${t.baseHp} > 0`),
     check('species_base_attack_non_negative', sql`${t.baseAttack} >= 0`),
@@ -76,5 +86,36 @@ export const species = pgTable(
   ],
 );
 
+/**
+ * THE FOUR FACES OF AN ELEMENTLESS SPECIES.
+ *
+ * A white creature is not four species, it is one with four possible awakenings,
+ * so this is a row per (species, element) rather than four species nobody could
+ * tell apart in a roster. It holds only what CHANGES when the stone lands: the
+ * name it takes and the artwork. Stats, powers and mana cost stay the species'.
+ */
+export const speciesForms = pgTable(
+  'species_forms',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    speciesId: uuid('species_id')
+      .notNull()
+      .references(() => species.id, { onDelete: 'cascade', onUpdate: 'cascade' }),
+    /** The base element this face belongs to. */
+    element: elementEnum('element').notNull(),
+    name: text('name'),
+    imagePath: text('image_path'),
+    ...timestamps,
+  },
+  (t) => [
+    uniqueIndex('species_forms_species_element_key').on(t.speciesId, t.element),
+    check(
+      'species_forms_element_is_base',
+      sql`${t.element} in ('fire', 'water', 'plant', 'psychic')`,
+    ),
+  ],
+);
+
 export type SpeciesRow = typeof species.$inferSelect;
 export type NewSpeciesRow = typeof species.$inferInsert;
+export type SpeciesFormRow = typeof speciesForms.$inferSelect;

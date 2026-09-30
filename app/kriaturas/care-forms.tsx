@@ -2,7 +2,7 @@
 
 import { useActionState } from 'react';
 import { useFormStatus } from 'react-dom';
-import { type CareActionState, choosePathAction, evolveAction, feedAction } from './actions';
+import { type CareActionState, feedAction } from './actions';
 
 /** All three forms submit through a real `action` prop, so no transition is needed. */
 
@@ -61,51 +61,6 @@ export function FeedForm({
           No te queda comida. Se consigue alineando fichas de comida en una partida.
         </p>
       ) : null}
-    </form>
-  );
-}
-
-export function ChoosePathForm({
-  creatureId,
-  pathId,
-  label,
-}: {
-  creatureId: string;
-  pathId: string;
-  label: string;
-}) {
-  const [state, action] = useActionState(choosePathAction, { ok: false } satisfies CareActionState);
-
-  return (
-    <form action={action}>
-      <Notice state={state} />
-      <input type="hidden" name="creatureId" value={creatureId} />
-      <input type="hidden" name="evolutionPathId" value={pathId} />
-      <Submit label={label} />
-    </form>
-  );
-}
-
-export function EvolveForm({
-  creatureId,
-  pathId,
-  disabled,
-  hint,
-}: {
-  creatureId: string;
-  pathId: string | null;
-  disabled: boolean;
-  hint: string;
-}) {
-  const [state, action] = useActionState(evolveAction, { ok: false } satisfies CareActionState);
-
-  return (
-    <form action={action}>
-      <Notice state={state} />
-      <input type="hidden" name="creatureId" value={creatureId} />
-      {pathId ? <input type="hidden" name="evolutionPathId" value={pathId} /> : null}
-      <Submit label="Evolucionar" disabled={disabled} danger />
-      <p className="small muted">{hint}</p>
     </form>
   );
 }

@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { Effect } from '@/core/effects/schema';
 import {
+  BOARD_TILE_KINDS,
   type Combatant,
   applyGravity,
   clearedIndices,
@@ -20,12 +21,30 @@ const combat: CombatConfig = {
   maxCascades: 20,
   playerMaxHp: 100,
   allowFreeSwaps: true,
+  damageOnlyOnSpecial: true,
+  manaPerGem: 1,
+  manaBonusPerExtraGem: 2,
+  botEnabled: true,
+  botSkill: 0.75,
+  movesPerTurn: 2,
+  extraMoveMinRun: 4,
+  extraMovesPerTurn: 1,
+  startingManaPercent: 40,
+  rivalManaCostPercent: 70,
+  fruitsToEvolve: 6,
+  tileWeights: { fire: 4, water: 4, plant: 4, psychic: 4, food: 3, drakofruta: 2 },
 };
 
 const options = { minMatchLength: 3 };
 
 /** Deterministic refills: every new tile is food, so cascades are predictable. */
-const alwaysFood = (): number => 0.99;
+/**
+ * Deterministic refills. `applyGravity` picks kinds[floor(r * kinds.length)],
+ * so this aims the source at FOOD — and keeps aiming there now that drakofruta
+ * has joined the bag, instead of silently refilling with the new tile.
+ */
+const alwaysFood = (): number =>
+  (BOARD_TILE_KINDS.indexOf('food') + 0.5) / BOARD_TILE_KINDS.length;
 
 /** A refill source that cycles a fixed script of choices. */
 function script(values: readonly number[]): () => number {
@@ -250,7 +269,7 @@ describe('resolveTurn', () => {
     const outcome = resolveTurn({
       move: result,
       team: [combatant(), combatant({ creatureId: 'c2', baseElement: 'psychic' })],
-      enemyElement: 'water',
+      enemyElements: ['water'],
       config: combat,
     });
 
@@ -264,13 +283,13 @@ describe('resolveTurn', () => {
     const base = resolveTurn({
       move: result,
       team: [combatant()],
-      enemyElement: 'water',
+      enemyElements: ['water'],
       config: combat,
     });
     const evolved = resolveTurn({
       move: result,
       team: [combatant({ isEvolved: true, pathAttackBonus: 6 })],
-      enemyElement: 'water',
+      enemyElements: ['water'],
       config: combat,
     });
 
@@ -291,13 +310,13 @@ describe('resolveTurn', () => {
     const against = resolveTurn({
       move: result,
       team: [combatant({ effects: [effect] })],
-      enemyElement: 'plant',
+      enemyElements: ['plant'],
       config: combat,
     });
     const wrong = resolveTurn({
       move: result,
       team: [combatant({ effects: [effect] })],
-      enemyElement: 'water',
+      enemyElements: ['water'],
       config: combat,
     });
 
@@ -312,7 +331,7 @@ describe('resolveTurn', () => {
     const plain = resolveTurn({
       move: result,
       team: [combatant()],
-      enemyElement: 'water',
+      enemyElements: ['water'],
       config: combat,
     });
     const boosted = resolveTurn({
@@ -324,7 +343,7 @@ describe('resolveTurn', () => {
           ],
         }),
       ],
-      enemyElement: 'water',
+      enemyElements: ['water'],
       config: combat,
     });
 
@@ -338,7 +357,7 @@ describe('resolveTurn', () => {
     const outcome = resolveTurn({
       move: result,
       team: [combatant({ baseElement: 'water' })],
-      enemyElement: 'plant',
+      enemyElements: ['plant'],
       config: combat,
     });
 
@@ -353,7 +372,7 @@ describe('resolveTurn', () => {
     const outcome = resolveTurn({
       move: result,
       team: [combatant(), combatant({ creatureId: 'c2' })],
-      enemyElement: 'water',
+      enemyElements: ['water'],
       config: combat,
     });
 
@@ -415,11 +434,50 @@ describe('resolveMove — free swaps', () => {
           mana: 0,
         },
       ],
-      enemyElement: 'water',
+      enemyElements: ['water'],
       config: combat,
     });
     expect(outcome.attacks).toHaveLength(0);
     expect(outcome.totalDamage).toBe(0);
     expect(outcome.foodGained).toBe(0);
+  });
+});
+
+describe('drakofruta — a tile that charges the IN-BATTLE evolution', () => {
+  it('is reported apart from food and triggers no creature', () => {
+    const result = resolveMove(
+      parseBoard('pdd\ndww\nwpp'),
+      { row: 0, col: 0 },
+      { row: 1, col: 0 },
+      { minMatchLength: 3, maxCascades: 0 },
+      alwaysFood,
+    );
+    if (!result.ok) throw new Error('fixture move was refused');
+
+    expect(result.cleared.drakofruta).toBe(3);
+
+    const outcome = resolveTurn({
+      move: result,
+      team: [
+        {
+          creatureId: 'c1',
+          baseElement: 'plant',
+          baseAttack: 10,
+          pathAttackBonus: 0,
+          isEvolved: false,
+          effects: [],
+          manaCost: 3,
+          mana: 0,
+        },
+      ],
+      enemyElements: ['water'],
+      config: combat,
+    });
+
+    /** The fruit fills the evolution bar, not a mana bar. */
+    expect(outcome.fruitsGained).toBe(3);
+    expect(outcome.foodGained).toBe(0);
+    expect(outcome.attacks).toHaveLength(0);
+    expect(outcome.totalDamage).toBe(0);
   });
 });

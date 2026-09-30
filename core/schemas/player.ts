@@ -5,11 +5,10 @@ import { z } from 'zod';
  * and never interchangeable with each other — there is no conversion rate:
  *
  *   food        common. Restores stamina. Nothing else.
- *   drakofruta  rare.   Spent on evolution. Nothing else.
  *   coins       currency. Buys eggs and shop items. Never affects stamina or evolution.
  */
 
-export const RESOURCE_KINDS = ['food', 'drakofruta', 'coins'] as const;
+export const RESOURCE_KINDS = ['food', 'coins'] as const;
 export type ResourceKind = (typeof RESOURCE_KINDS)[number];
 export const resourceKindSchema = z.enum(RESOURCE_KINDS);
 

@@ -5,8 +5,11 @@ import {
   type BattleState,
   type Combatant,
   type Rival,
-  applyTurn,
+  applyPlayerMove,
+  applyRivalMove,
+  chooseBotMove,
   createPlayableBoard,
+  endTurn,
   findValidMove,
   hasValidMove,
   parseConfig,
@@ -39,6 +42,7 @@ const COLOR: Record<BoardTileKind, string> = {
   plant: '\x1b[32m',
   psychic: '\x1b[35m',
   food: '\x1b[90m',
+  drakofruta: '\x1b[95m',
 };
 const LETTER: Record<BoardTileKind, string> = {
   fire: 'F',
@@ -46,6 +50,7 @@ const LETTER: Record<BoardTileKind, string> = {
   plant: 'P',
   psychic: 'S',
   food: 'o',
+  drakofruta: 'D',
 };
 
 const arg = (name: string): string | undefined =>
@@ -89,7 +94,8 @@ function drawState(state: BattleState, board: Board): string {
     );
     for (const foe of state.rivals) {
       lines.push(
-        `    ${foe.name.padEnd(12)} ${COLOR[foe.element as BoardTileKind] ?? ''}${foe.element}${RESET}  (pega ${foe.attack})`,
+        `    ${foe.name.padEnd(12)} ${COLOR[foe.element as BoardTileKind] ?? ''}${foe.element.padEnd(8)}${RESET}` +
+          ` maná ${bar(foe.mana, foe.manaCost)} ${foe.mana}/${foe.manaCost}  (pega ${foe.attack})`,
       );
     }
   }
@@ -107,6 +113,10 @@ function drawState(state: BattleState, board: Board): string {
   lines.push(
     `  TU VIDA  ${bar(state.playerHp, state.playerMaxHp, 20)} ${state.playerHp}/${state.playerMaxHp}` +
       (state.shield > 0 ? `   escudo ${state.shield} (${state.shieldTurns} turnos)` : ''),
+  );
+  lines.push(
+    `  turno ${state.turn + 1} · te quedan ${state.movesLeft} jugada(s)` +
+      (state.extraMoveUsed ? ' · bonus ya usado' : ''),
   );
   return lines.join('\n');
 }
@@ -145,7 +155,13 @@ async function main(): Promise<void> {
     const combat = parseConfig('combat', raw('combat'));
     const play = parseConfig('play', raw('play'));
 
-    const roster = await db.select().from(species).where(eq(species.isPublished, true));
+    /**
+     * Only species that HAVE an element: a white one is triggered by no gem, so
+     * it would sit in the simulator charging nothing for the whole fight.
+     */
+    const roster = (
+      await db.select().from(species).where(eq(species.isPublished, true))
+    ).filter((row): row is typeof row & { baseElement: string } => row.baseElement !== null);
     if (roster.length < play.teamSize + 1) {
       throw new Error('No hay especies suficientes. Ejecuta npm run db:seed');
     }
@@ -182,7 +198,9 @@ async function main(): Promise<void> {
       id: row.slug,
       name: row.name,
       element: row.baseElement,
-      attack: Math.max(1, Math.round(row.baseAttack / 3)),
+      attack: Math.max(1, Math.round(row.baseAttack / 2)),
+      manaCost: row.manaCost,
+      mana: 0,
     }));
 
     let state = startBattle({ team, rivals, config: combat });
@@ -250,37 +268,106 @@ async function main(): Promise<void> {
       const outcome = resolveTurn({
         move,
         team: state.team,
-        enemyElement: state.rivals[0]?.element ?? 'water',
+        enemyElements: state.rivals.map((entry) => entry.element),
         config: combat,
       });
 
-      const applied = applyTurn(state, outcome);
-      state = applied.state;
-      const log = applied.log;
+      const played = applyPlayerMove(state, outcome, combat);
+      state = played.state;
 
       console.log('');
       for (const attack of outcome.attacks) {
         const special = attack.charged
-          ? `  ⚡ ESPECIAL  +${attack.effectDamage} daño${attack.heal > 0 ? ` +${attack.heal} vida` : ''}${attack.shield > 0 ? ` +${attack.shield} escudo` : ''}`
+          ? `  ⚡ ESPECIAL  ${attack.basicDamage + attack.effectDamage} daño${attack.heal > 0 ? ` +${attack.heal} vida` : ''}${attack.shield > 0 ? ` +${attack.shield} escudo` : ''}`
           : '';
         console.log(
           `  ${attack.creatureId}: ${attack.gemsCleared} gemas (racha ${attack.longestRun})` +
-            ` · básico ${attack.basicDamage} · maná ${attack.manaAfter}/${attack.manaCost}${special}`,
+            ` · +${attack.manaGained} maná → ${attack.manaAfter}/${attack.manaCost}${special}`,
         );
       }
-      if (move.steps.length === 0) console.log('  Moviste sin alinear: gastas el turno.');
+      if (move.steps.length === 0) console.log('  Moviste sin alinear: gastas la jugada.');
       else if (outcome.attacks.length === 0) console.log('  Nadie de tu equipo tenía ese elemento.');
       if (outcome.foodGained > 0) console.log(`  +${outcome.foodGained} comida`);
       if (outcome.cascades > 0) console.log(`  ${outcome.cascades} cascada(s)`);
+      if (played.log.extraMoveGranted) console.log('  ✦ ¡Alineaste 4 o más! Ganas una jugada extra.');
+      console.log(`  → ${played.log.damageToOpponent} de daño al rival`);
 
-      console.log(`  → ${log.damageToOpponent} de daño al rival`);
-      if (applied.state.status === 'won') console.log('  → ¡Rival sin vida! No contraataca.');
-      else {
-        console.log(
-          `  ← el rival pega ${log.rivalAttack}` +
-            (log.absorbedByShield > 0 ? ` (escudo absorbe ${log.absorbedByShield})` : '') +
-            ` · pierdes ${log.damageToPlayer}`,
-        );
+      /**
+       * THE BOT PLAYS THE SAME BOARD once your moves are spent, with the same
+       * budget and the same bonus rule. It hits only when one of its bars fills.
+       */
+      if (played.log.turnOver && state.status === 'active') {
+        let budget = combat.movesPerTurn;
+        let bonusTaken = false;
+
+        while (budget > 0 && state.status === 'active') {
+          const botTeam: Combatant[] = state.rivals.map((foe) => ({
+            creatureId: foe.name,
+            baseElement: foe.element as Combatant['baseElement'],
+            baseAttack: foe.attack,
+            pathAttackBonus: 0,
+            isEvolved: false,
+            effects: [],
+            manaCost: foe.manaCost,
+            mana: foe.mana,
+          }));
+
+          const pick = chooseBotMove(
+            board,
+            {
+              minMatchLength: combat.minMatchLength,
+              preferElements: botTeam.map((foe) => foe.baseElement),
+              skill: combat.botSkill,
+              allowNonMatching: combat.allowFreeSwaps,
+            },
+            random,
+          );
+          if (!pick) break;
+
+          const botMove = resolveMove(
+            board,
+            pick.from,
+            pick.to,
+            {
+              minMatchLength: combat.minMatchLength,
+              maxCascades: combat.maxCascades,
+              allowNonMatching: true,
+            },
+            random,
+          );
+          if (!botMove.ok) break;
+
+          const botOutcome = resolveTurn({
+            move: botMove,
+            team: botTeam,
+            enemyElements: state.team.map((entry) => entry.baseElement),
+            config: combat,
+          });
+          const answered = applyRivalMove(state, botOutcome, combat);
+          state = answered.state;
+          board = botMove.board;
+
+          console.log(
+            `  ← el rival mueve ${pick.from.row},${pick.from.col} → ${pick.to.row},${pick.to.col}` +
+              (answered.log.damageToPlayer > 0
+                ? ` · ⚡ te pega ${answered.log.damageToPlayer}`
+                : ' · solo carga maná') +
+              (answered.log.absorbedByShield > 0
+                ? ` (escudo absorbe ${answered.log.absorbedByShield})`
+                : ''),
+          );
+
+          budget -= 1;
+          if (!bonusTaken && answered.log.extraMoveGranted) {
+            budget += combat.extraMovesPerTurn;
+            bonusTaken = true;
+            console.log('  ← el rival alineó 4 o más: jugada extra para él.');
+          }
+        }
+
+        state = endTurn(state, combat);
+      } else if (state.status === 'won') {
+        console.log('  → ¡Rival sin vida! No contraataca.');
       }
 
       if (!hasValidMove(board, combat.minMatchLength)) {

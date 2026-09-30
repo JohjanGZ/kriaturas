@@ -3,6 +3,7 @@
 import { useActionState, useState } from 'react';
 import { useFormStatus } from 'react-dom';
 import { CreatureArt, type ArtElement } from '../creature-art';
+import type { BattleMode } from '@/core/fields';
 import { type BattleActionState, startBattleAction } from './actions';
 
 /**
@@ -14,19 +15,47 @@ import { type BattleActionState, startBattleAction } from './actions';
 export type PickableCreature = {
   id: string;
   name: string;
-  element: string;
+  /** Null for a WHITE creature: no stone has given it an element yet. */
+  element: string | null;
+  /** Set once it evolved: what it LOOKS like, not what charges its bar. */
+  evolvedElement: string | null;
   attack: number;
   manaCost: number;
+  /** What the running season changed, so the number can explain itself. */
+  attackDelta: number;
+  manaCostDelta: number;
   stamina: number;
   maxStamina: number;
   canPlay: boolean;
-  isEvolved: boolean;
+  /** The rare mark: in battle it transforms into the SUPERIOR element. */
+  isExcellent: boolean;
 };
 
-function StartButton({ disabled, label }: { disabled: boolean; label: string }) {
+function StartButton({
+  disabled,
+  label,
+  mode,
+  primary,
+}: {
+  disabled: boolean;
+  label: string;
+  mode: BattleMode;
+  primary: boolean;
+}) {
   const { pending } = useFormStatus();
   return (
-    <button className="btn-primary" type="submit" disabled={disabled || pending}>
+    /**
+     * The MODE rides on the button, not on a radio somewhere above it: two
+     * buttons say "these are two different games" far better than one button
+     * and a setting the player has to have noticed.
+     */
+    <button
+      className={primary ? 'btn-primary' : ''}
+      type="submit"
+      name="mode"
+      value={mode}
+      disabled={disabled || pending}
+    >
       {pending ? 'Empezando…' : label}
     </button>
   );
@@ -70,31 +99,57 @@ export function TeamPicker({
       <div className="grid">
         {creatures.map((creature) => {
           const isPicked = picked.includes(creature.id);
+          /**
+           * A white creature is not tired, it is UNFINISHED. Saying so where
+           * the player would otherwise tap it is the whole tutorial for the
+           * mechanic: no gem on the board charges it, so it cannot come.
+           */
+          const white = creature.element === null;
+          const usable = creature.canPlay && !white;
           return (
             <button
               type="button"
               key={creature.id}
               className={`card species-card picker${isPicked ? ' picker-on' : ''}`}
               onClick={() => toggle(creature.id)}
-              disabled={!creature.canPlay}
-              style={{ textAlign: 'left', cursor: creature.canPlay ? 'pointer' : 'not-allowed' }}
+              disabled={!usable}
+              style={{ textAlign: 'left', cursor: usable ? 'pointer' : 'not-allowed' }}
             >
               <CreatureArt
-                element={creature.element as ArtElement}
+                element={(creature.evolvedElement ?? creature.element ?? 'none') as ArtElement}
                 name={creature.name}
                 className="creature-thumb"
               />
               <div>
-                <span className={`tag tag-${creature.element}`}>{creature.element}</span>{' '}
-                {creature.isEvolved ? <span className="tag tag-muted">evolucionada</span> : null}
+                <span className={`tag tag-${creature.element ?? 'none'}`}>
+                  {creature.element ?? 'sin elemento'}
+                </span>{' '}
+                {creature.isExcellent ? (
+                  <span className="tag tag-excellent" title="Inmune a los nerfeos de temporada">
+                    ✦ excelente
+                  </span>
+                ) : null}
               </div>
               <strong>{creature.name}</strong>
               <span className="small">
                 Ataque {creature.attack} · maná {creature.manaCost}
               </span>
+              {creature.attackDelta !== 0 || creature.manaCostDelta !== 0 ? (
+                <span className="small season-tuned">
+                  temporada: {creature.attackDelta > 0 ? '+' : ''}
+                  {creature.attackDelta !== 0 ? `${creature.attackDelta} ataque` : ''}
+                  {creature.attackDelta !== 0 && creature.manaCostDelta !== 0 ? ' · ' : ''}
+                  {creature.manaCostDelta !== 0
+                    ? `${creature.manaCostDelta > 0 ? '+' : ''}${creature.manaCostDelta} maná`
+                    : ''}
+                </span>
+              ) : null}
               <span className="small muted">
-                Stamina {creature.stamina}/{creature.maxStamina}
-                {creature.canPlay ? '' : ' — agotada'}
+                {white
+                  ? 'Necesita una piedra elemental para poder luchar'
+                  : `Stamina ${creature.stamina}/${creature.maxStamina}${
+                      creature.canPlay ? '' : ' — agotada'
+                    }`}
               </span>
             </button>
           );
@@ -105,10 +160,20 @@ export function TeamPicker({
         <input key={id} type="hidden" name="creatureIds" value={id} />
       ))}
 
-      <StartButton
-        disabled={!ready}
-        label={ready ? 'Empezar partida' : `Elige ${teamSize - picked.length} más`}
-      />
+      <div className="row" style={{ gap: '0.6rem', alignItems: 'center' }}>
+        <StartButton
+          mode="normal"
+          primary
+          disabled={!ready}
+          label={ready ? 'Empezar partida' : `Elige ${teamSize - picked.length} más`}
+        />
+        <StartButton mode="campos" primary={false} disabled={!ready} label="Jugar en un campo" />
+      </div>
+      <p className="small muted">
+        En <strong>campo</strong> se sortea un terreno con su propia regla — se baraja el tablero
+        entre turnos, hay minas con cuenta atrás, no cae drakofruta… Sale al azar y no se puede
+        elegir.
+      </p>
     </form>
   );
 }

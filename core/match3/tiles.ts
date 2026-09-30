@@ -16,16 +16,35 @@ import type { CombatConfig } from '../schemas/config';
  * creature. So "the board only ever uses the four base elements" still holds for
  * everything that attacks.
  *
- * Drakofruta is deliberately NOT a board kind. A tile rare enough to protect the
- * evolution economy would almost never form an alignment, and one common enough
- * to align would make the rare resource farmable. It arrives by rule instead.
+ * Drakofruta IS a board kind, and the rarest one. Matching it charges the
+ * IN-BATTLE evolution — a creature that transforms for the rest of the fight —
+ * and it never touches the player's drakofruta wallet. That is what keeps it off
+ * the old objection: a tile you can farm must not pay a permanent currency, so
+ * this one pays a temporary power instead.
  */
 
-export const NEUTRAL_TILE_KINDS = ['food'] as const;
+export const NEUTRAL_TILE_KINDS = ['food', 'drakofruta'] as const;
 export const BOARD_TILE_KINDS = [...BASE_ELEMENTS, ...NEUTRAL_TILE_KINDS] as const;
 
 export type NeutralTileKind = (typeof NEUTRAL_TILE_KINDS)[number];
 export type BoardTileKind = (typeof BOARD_TILE_KINDS)[number];
+
+/**
+ * How often each kind is dealt, as a bag of copies drawn uniformly.
+ *
+ * Six kinds spread evenly would make every alignment rarer AND hand out
+ * drakofruta like gravel. Weighting keeps the elements frequent enough to play
+ * with and the fruit scarce enough that lining three up is an event.
+ */
+export function tileBag(weights: Readonly<Record<BoardTileKind, number>>): BoardTileKind[] {
+  const bag: BoardTileKind[] = [];
+  for (const kind of BOARD_TILE_KINDS) {
+    const copies = Math.max(0, Math.trunc(weights[kind]));
+    for (let i = 0; i < copies; i += 1) bag.push(kind);
+  }
+  if (bag.length === 0) throw new Error('Every tile weight is zero: nothing could be dealt');
+  return bag;
+}
 
 export function isElementTile(tile: BoardTileKind): tile is BaseElement {
   return (BASE_ELEMENTS as readonly string[]).includes(tile);

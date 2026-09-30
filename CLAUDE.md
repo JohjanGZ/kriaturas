@@ -6,7 +6,7 @@ PGlite locally, Neon Postgres + Cloudflare Workers in production.
 ## Folder rules
 
 ```
-/core      domain logic: elements, stamina, evolution, objectives, eggs, effects, match-3
+/core      domain logic: elements, stamina, balance, objectives, eggs, effects, match-3
 /db        schema, migrations, client, seed
 /app       Next.js routes and UI
 /app/admin admin panel
@@ -30,52 +30,105 @@ set**: `light`, `ice`, `poison`, `astral`, `rock`, and more can be added (one ar
 `core/elements.ts` plus a migration).
 
 **The match-3 board only ever uses the four base elements — never the evolved ones.**
-A creature always triggers on its **species base element**, evolved or not
-(`triggerElementFor`); evolving only makes it hit harder (`combat.evolvedDamageMultiplier`).
+A creature always triggers on its **species base element**, transformed or not
+(`triggerElementFor`); transforming only makes it hit harder
+(`combat.evolvedDamageMultiplier`).
 Never map an evolved element back to a base one: poison and rock can both come from plant, so
 that mapping is not invertible.
 
-### The four canonical pairs
+### The four canonical pairs — the SUPERIOR element
 
-| base    | default evolution |
-| ------- | ----------------- |
-| fire    | light             |
-| water   | ice               |
-| plant   | poison            |
-| psychic | astral            |
+| base    | superior element |
+| ------- | ---------------- |
+| fire    | light            |
+| water   | ice              |
+| plant   | poison           |
+| psychic | astral           |
 
-`CANONICAL_EVOLUTIONS` in `core/elements.ts` is the **default path** created for a new species
-and what the admin form prefills. It is not a limit: a species may offer several paths.
+`CANONICAL_EVOLUTIONS` (`superiorElementFor`) is what an **excellent** creature transforms into.
+An ordinary one keeps its own element. It is the prize of rarity, not a default.
 
-## Evolution — branching, gated, permanent
+## Evolution — IN BATTLE, temporary, and two grades
 
-A species owns one or more **evolution paths** (`evolution_paths`): plant → poison *or*
-plant → rock. Each path has its own target element, image, stat bonuses and effects.
+**There is no permanent evolution.** A creature is never upgraded for ever: it TRANSFORMS during
+a fight, paid for with the drakofruta aligned on the board, and it goes back to itself when the
+battle ends. Nothing writes to the creature row, and there is no evolution currency to save.
 
-**The evolved element is never chosen freely.** The choice is a foreign key into the paths the
-admin defined for that species, and the server re-checks the path belongs to the creature's
-species before writing. An arbitrary element has nowhere to be stored: `target_element` is
-constrained to evolved elements only.
+A species owns **two paths** (`evolution_paths`), told apart by where they point — the grade is
+derived (`pathTier`), never a column that could contradict the target:
 
-Evolution is two permanent steps on **the same creature row** — never a new record, never
-reversible:
+| grade | target | who gets it | bonuses |
+| ----- | ------ | ----------- | ------- |
+| normal | its OWN base element (fire → fire) | any creature | +10 HP, +5 attack, +3 defence |
+| superior | the canonical pair (fire → light) | **excellent only** | +3 on each of those |
 
-1. **Choose.** The player locks `creatures.evolution_path_id` (+ `evolution_chosen_at`).
-   Written once; the service layer refuses a second write. Config `evolution.allowEarlyPathChoice`
-   decides whether this may happen before the requirements are met.
-2. **Evolve.** Requires, checked server-side inside **one transaction**:
-   - every objective required by that path is **completed** (config `evolution.requireObjectives`),
-   - the player holds enough **drakofruta** — `cost(n) = baseFruitCost + n * costIncrementPerEvolution`,
-     where `n` is `players.evolutions_performed`, all from the config row, never a constant.
+**Excellent is a permanent mark on the CREATURE** (`creatures.is_excellent`), decided when it is
+born and never removed. It does two things, and nothing else:
 
-   The transaction spends the fruits, increments `evolutions_performed`, and flips
-   `is_evolved` false → true with `evolved_at`.
+1. the in-battle transformation takes the SUPERIOR path instead of the ordinary one;
+2. **it is immune to a season's nerfs** (`effectiveAdjustment`) — it keeps every buff a season
+   hands out and ignores every penalty. That is a large part of what makes the rare mark worth
+   chasing: it survives the balance pass that flattens everyone else.
+
+A nerf is not "a negative number", it is "worse", and worse points in a different direction per
+stat: LESS attack is a nerf, MORE mana cost is a nerf too. Filtering by sign alone would protect
+an excellent creature from a cheaper bar — a gift — and let an expensive one through.
+
+`CANONICAL_EVOLUTIONS` in `core/elements.ts` is therefore no longer "the default path": it is the
+PRIZE, the element only a rare creature reaches. `superiorElementFor` is the one place that
+mapping lives, which is why the path is chosen in TypeScript rather than joined in SQL.
+
+> An ordinary transformation keeps the element, so with the generated placeholder art it looks
+> the same. That is expected: each path carries its own `image_path`, and the normal grade will
+> be a different DRAWING, not a different colour.
+
+## The WHITE creature — a species with no element
+
+One species (`albo`) has **no element of its own**: `species.base_element` is NULL. It hatches
+white, it **cannot be taken into a battle at all**, and an elemental stone later turns it into
+one of four.
+
+**Null, not a fifth element.** "No element" is an ABSENCE, and modelling it as a tenth enum
+value would put it on the board, give it a palette and let it be picked — the four base elements
+are what the board deals and nothing else may pretend to be one.
+
+- **`creatures.element`** is what a stone writes, per creature. Null for every ordinary creature,
+  whose element comes from its species. `resolveElement(speciesBase, creatureElement)` is the one
+  place that rule lives, and everything asks it — a roster that disagreed with the picker would
+  offer a fight the battle then refuses.
+- **It cannot fight, and `startBattle` is the only place that says so.** No gem on the board
+  charges it, so it would stand there for a whole battle doing nothing. The check runs before any
+  stamina is spent, which is also why every query downstream may treat a battle's creatures as
+  having an element (`coalesce(creatures.element, species.base_element)`).
+- **Awakening is written ONCE**, guarded by `WHERE element IS NULL` rather than by a read then a
+  write: two stones at the same instant would both pass a check made in TypeScript, and the
+  second has to lose. A row constraint backs it up, so there is no creature with an element and
+  no instant.
+- **Four faces, one species** (`species_forms`, a row per species and base element). It is not
+  four species that happen to share stats: only the NAME and the DRAWING change when the stone
+  lands, and keeping it to those two is what stops one creature with four faces from quietly
+  becoming four creatures sharing a row. A white species is also created with four evolution
+  paths — one per element — so an awakened creature can still transform along its own.
+- **White is drawn white and CROWNLESS** (`creature-art.tsx`). The missing crown is the point: at
+  a glance it reads as unfinished rather than as a pale version of something else.
+- **It is the rarest thing in the egg pool** (weight 1 against 4, about one hatch in sixty).
+  The species is still rolled at PURCHASE and hidden until `status = 'hatched'`, so what the
+  player experiences is finding it when the egg opens, with nothing to re-roll.
+
+> **The stone itself does not exist yet.** The item, its price and how a player gets one are
+> still to be built. The write it will perform is already here (`awakenCreature`), and
+> `npx tsx scripts/dev-force-result.ts piedra albo water` uses the stone the game has not got, so
+> the awakened creature can be looked at meanwhile.
 
 ## Objectives — unlock requirements
 
 `objectives` is an admin catalog: a **metric** (`matches_won`, `element_gems_cleared`,
-`days_cared`, …), validated **params**, and a **target value**. `evolution_requirements` links
-objectives to a path. No rows means no requirements.
+`days_cared`, …), validated **params**, and a **target value**.
+
+**They are TRACKED but gate nothing today.** They used to unlock the permanent evolution, which
+no longer exists; the counters keep running because they are the raw material for whatever
+unlock comes next (a shop, a season reward, the rare mark itself). `evolution_requirements`
+still exists and is simply unused.
 
 `objective_progress` tracks a counter per creature (`creature_id` set) or per player
 (`creature_id` null). **Progress is only ever advanced server-side** from a resolved match or a
@@ -102,13 +155,18 @@ a creature.
 `core/match3` holds the whole turn as pure functions: `createPlayableBoard`, `findRuns`,
 `applyGravity`, `resolveMove`, `resolveTurn`. No UI, no storage, no clock, no `Math.random`.
 
-- **The board holds five tile kinds**: the four base elements plus `food`. With N kinds a
-  random 8x8 fill produces roughly 96/N^2 free alignments — four kinds gives ~6 unearned
-  cascades per fill, five gives ~3.8. `createBoard` avoids them entirely by never placing a
-  tile that completes a run, and `createPlayableBoard` also guarantees a legal move exists.
-- **Food is a resource, not an element.** Matching it grants food and triggers no creature.
-  Drakofruta is deliberately not a board kind: rare enough to protect the economy means it
-  would almost never align, and common enough to align would make it farmable.
+- **The board holds six tile kinds**: the four base elements, `food` and `drakofruta`. More
+  kinds means fewer accidental alignments (a random fill makes roughly 96/N^2 of them), which is
+  why the kinds are dealt from a WEIGHTED bag rather than evenly: spread flat, six kinds would
+  make every alignment rarer and hand out the fruit like gravel. `createBoard` also never places
+  a tile that completes a run, and `createPlayableBoard` guarantees a legal move exists.
+- **Two resource tiles, and neither is an element.** Matching `food` grants food; matching
+  `drakofruta` fills the IN-BATTLE evolution bar. Neither triggers a creature.
+- **Drakofruta IS a board tile, and the rarest one** (`combat.tileWeights`, dealt from a bag so
+  the elements stay frequent and the fruit stays scarce). This reverses the old rule, and the
+  old objection is answered rather than ignored: a tile you can farm must not pay a PERMANENT
+  currency, so the fruit pays a power that EXPIRES with the battle. There is no wallet to reach:
+  the player has no drakofruta balance at all.
 - **The client sends two positions and nothing else** — not the matches it thinks it made,
   not the damage, not the tiles it expects to fall.
 - **Free swaps** (`combat.allowFreeSwaps`, on by default): a swap that lines nothing up is a
@@ -124,12 +182,47 @@ a creature.
 
 ### Mana and specials
 
-A triggered creature does two things in the same move:
+**A MATCH IS NOT AN ATTACK.** Aligning a creature's element only CHARGES ITS BAR
+(`combat.damageOnlyOnSpecial`, on by default). When the bar fills, the attack comes out
+carrying the creature's **effects** — its special — and the bar empties. A match that does not
+fill a bar deals **zero** damage.
 
-1. **Basic attack, always.** Small, immediate, no effects — there is never a turn where
-   nothing happens.
-2. **Mana.** The gems cleared charge its bar. When the bar fills, *that same attack* comes out
-   carrying the creature's **effects** — its special — and the bar empties.
+A small attack on every match made the special a rounding error: fights were decided by chip
+damage nobody aimed, and holding a bar to land a big hit was strictly worse than clearing
+whatever was nearest. Paying only on a full bar makes every gem an investment and makes *which
+bar do I feed* the decision of the turn. Switch `damageOnlyOnSpecial` off and the old
+per-match attack comes back.
+
+**Longer alignments are worth more mana than their extra gems alone.** `manaGainedFor` pays
+`manaPerGem` per gem plus `manaBonusPerExtraGem` for each gem past `minMatchLength`, so a
+five-run beats a three-run plus two loose gems — which is what makes building one worth the
+move it costs.
+
+#### Tuning: the fight has to MOVE
+
+A team of two on a board of four elements plus food means **most of what you clear charges
+nobody**. That is the tuning problem, and three rows answer it:
+
+- **Bars cost 5–14 gems**, not 6–24. A bar nobody ever fills is a creature that spent the whole
+  battle doing nothing, and the expensive end of the old range did exactly that.
+- **`startingManaPercent` (40) starts every bar part-full**, both sides. Starting empty meant
+  the first two or three turns paid nothing at all — the worst possible opening for a game that
+  has to earn attention in its first minute.
+- **A rival attacks for its FULL species attack**, and its bar costs `rivalManaCostPercent`
+  (70%) of the species price. Rivals carry no effects and never evolve, so their special is bare
+  damage: at the species price the rival simply never fired, and an opponent that cannot answer
+  is scenery, not a fight.
+- **`playerMaxHp` is 120.** Health is the knob for LENGTH, the bars are the knob for RHYTHM, and
+  confusing the two is how tuning goes wrong: at 100 a battle ended in three turns, at 150 it
+  dragged while the rival never fired.
+
+Measured at these numbers: **10 turns, 24 moves, six specials from the player and seven hits
+from the rival**, ending 33/120 — level at 47 against 46 halfway through. A special on a
+three-run deals ~10; the same special on a four-run deals ~44, so **saving a big run for the
+turn the bar completes is the sharpest play in the game**.
+
+Run length multiplies the hit (`damageForMatch`), and damage only lands when the bar fills — so
+the sharpest play in the game is **saving a four or five for the turn the bar completes**.
 
 So effects are not a per-match freebie; they are what the bar is for, and they are the reason
 two creatures of one element feel different. `chargeMana` fires **at most once per turn** even
@@ -165,10 +258,227 @@ species data for the roster and for whatever later mode wants them.
 
 - Your damage lands **first**: emptying the rival ends the battle before they answer, so
   finishing beats trading.
-- The rival lineup answers **once per player move**, for the sum of its attacks.
+
+### The turn: two moves, and a bonus for a big run
+
+A turn is `combat.movesPerTurn` (2) moves. Clear a run of `combat.extraMoveMinRun` (4) or more
+and you get **one more move** — granted at most `extraMovesPerTurn` (1) times per turn, however
+many big runs you make, because without that cap a cascade chain could hand someone an endless
+turn. `movesLeft` and `extraMoveUsed` are **columns on `battles`**, not memory: a turn now
+spans several requests, so the server has to remember how many moves are left and whether the
+bonus was already handed out.
+
+### The rival is a bot, and it plays YOUR board
+
+When your moves run out, the bot plays — `combat.movesPerTurn` moves on the **same board**,
+with the same bonus-move rule, chosen by `chooseBotMove` (`core/match3/bot.ts`). It charges its
+own bars from what it clears and **hits you only when one fills**, exactly like your creatures:
+nothing in the resolution is a special case for the machine, which is the only reason the fight
+can read as fair.
+
+- The gems you leave behind are the gems it gets. A move is no longer only "what do I clear"
+  but "what am I handing over".
+- Scoring is deliberately **one clear deep, with no cascade lookahead**, and candidates are
+  probed with a fixed random so a refill that has not fallen cannot influence the choice. A bot
+  that searched deeper would out-plan a human on a board neither can predict, which reads as
+  cheating rather than as difficulty. `combat.botSkill` (0.75) is how often it takes its own
+  best answer.
+- Its moves come back to the browser as `rivalMoves` and are **replayed after yours** — its
+  swap, then its cascade — because otherwise the board would simply look different next time
+  you saw it.
+- `combat.botEnabled` off restores the old behaviour: the lineup just swings for the sum of its
+  attacks (`applyRivalStrike`) without touching the board.
+
+#### The fruit on the board: evolving DURING the fight
+
+Drakofruta aligned on the board fills one **shared bar per side** (`battles.fruits` /
+`rival_fruits`). Fill it and you pick ONE creature to transform for the rest of the battle: it
+hits like an evolved creature (its path's attack bonus, its path's effects, the evolved damage
+multiplier) and it LOOKS like one. `combat.fruitsToEvolve` is the threshold.
+
+- **It is temporary and it is not the permanent evolution.** `battle_creatures.evolved_in_battle`
+  holds it; the creature row is never touched, and no wallet fruit is spent.
+- **A creature that never locked a branch borrows its species' DEFAULT path** — the fight cannot
+  stop to ask which branch to take.
+- **The bot plays by the same rule** (`rivalToEvolve`): it banks the fruit IT clears and spends it
+  on its hardest hitter. The board is shared, so the fruit you leave is the fruit it gets — which
+  is what makes a drakofruta alignment worth taking even when you would rather charge a bar.
+- **You choose, the ceremony shows it.** The prompt lists your creatures; the transformation
+  takes the screen exactly like the permanent one and reveals the new look.
+
+#### The turn change is ANNOUNCED and the board is LOCKED
+
+Gems that move with no input read as the game glitching, not as an opponent thinking. So the
+handover is staged, and none of it is decoration:
+
+1. **"Turno del rival"** over the board (`BANNER_MS`, ~950ms) before a single gem moves.
+2. The board **drains of colour** (`.board-locked`) and carries a **🔒 Juega el rival** pill.
+   The lock is a thing you can SEE, not just dead input: a player who taps during the rival's
+   turn has to learn why nothing happened.
+3. The bot's moves replay.
+4. **"Tu turno"** hands it back, and the colour returns.
+
+The lineup that is playing is lit and the other dims (`.arena-active`), and the moves left in
+your turn are **pips, not a fraction** — how many moves you have should be countable at a
+glance, since that is the number every decision hangs on.
+
+#### The bars are paced by the REPLAY, not by the server
+
+One request resolves your move **and** the bot's answer, so the page re-renders with the final
+numbers at once. Rendering health straight from those props meant the player watched their life
+drop during their OWN turn, with nothing on screen to explain it — the single most confusing
+thing the battle did.
+
+So `board.tsx` keeps `shown` health and a frozen copy of every mana bar, and moves them where
+the animation says:
+
+- your damage lands when YOUR gems finish clearing,
+- each of the bot's hits lands after the cascade that caused it,
+- everything settles on the server's numbers when the replay ends.
+
+The snapshot is taken in `submit()`, BEFORE the answer arrives — by the time the replay effect
+runs, the props are already the post-turn values, so freezing them there would freeze the
+spoiler. `.bar-fill` also transitions its width: a bar that jumps reads as a number changing,
+one that slides reads as a blow landing.
+
+**An attack is three beats, never one.** `resolveAttacks` plays them in the only order that
+explains itself, for your creatures and the bot's alike:
+
+1. **the bar fills** with the gems that charged it — a bar that fired must be seen full first,
+   or the discharge looks like a glitch;
+2. **the bar empties and a bolt leaves the creature** (`.shot`, aimed at the life bar it will
+   hit, green from your side and red from theirs);
+3. **the health drops and the bar flinches** (`.bar-hit`) when the bolt arrives.
+
+The server sends `attacks` per move — `manaAfter`, `manaCost`, `charged` per creature — for
+exactly this: without it the browser knows the final mana but not *when* it changed, and the
+bars can only snap. Damage that appears without a bolt is arithmetic happening off screen;
+this is what makes it an event the player watched.
+
+#### The result is a ROW, not a toast
+
+A battle stops being `active` the instant the last gem clears, so the play screen would flip to
+the team picker before the player learned they had won. `battles.dismissed_at` fixes that:
+`getBattleToShow` returns the active battle **or** the newest won/lost battle that has not been
+acknowledged, and the win screen stays until `dismissBattleAction` writes that column.
+
+- It survives a reload, a closed tab and a dead connection. A toast would not.
+- It waits for the replay (`showResult` needs `!replaying && !rivalPlaying`): announcing the win
+  while gems are still falling cuts the ending off the move that won.
+- Abandoning writes `dismissed_at` itself, so quitting never shows a result screen.
 - `heal` restores your health, capped at the fixed maximum. `shield` absorbs incoming damage
   before health does, and expires after its turns whether it was used or not.
 - Mana is carried forward per creature between turns.
+
+### The powers — one catalogue, eighteen verbs
+
+A creature's special is its list of EFFECTS (`core/effects/schema.ts`), and every creature in the
+seed owns a different one. They are data, resolved by generic primitives in
+`core/effects/resolve.ts`, so a new creature is a JSONB row and never a new branch:
+
+| effect | what it does |
+| ------ | ------------ |
+| `damage` | **PIERCING** damage — see below |
+| `damage_by_type` | ordinary damage, the blockable channel |
+| `heal` / `shield` | restore life / absorb the next blows |
+| `combo_bonus` | a percentage on the blockable damage |
+| `drain_mana` / `mana_boost` | empty one or two enemy bars / fill your own |
+| `absorb_fruit` | bank drakofruta without aligning it |
+| `extra_move` / `steal_move` | one more move for you / one fewer for them |
+| `poison` | life lost per MOVE the victim makes, for N turns |
+| `block_attack` | that creature's blow is cancelled when it fires |
+| `paralyze` | that creature's bar stops filling at all |
+| `convert_tiles` / `shuffle_board` | repaint tiles / reroll the grid |
+| `lifesteal` | a share of what you dealt comes back as health |
+| `cleanse` | frees the caster of block, paralysis and poison |
+| `fruit_block` | the victim banks no fruit, so it cannot transform |
+
+Variety does not come from adding verbs, it comes from `effectConditionSchema`: `min_gems`,
+`min_combo`, `self_below_percent`, `enemy_below_percent`, `min_fruits`, `turn_at_least`,
+`self_evolved`, `enemy_element`. Eighteen effects times eight conditions is the combination
+space a large roster needs, and each pair reads as a different creature without a line of code.
+
+#### `damage` PIERCES. `damage_by_type` does not
+
+Every attack in this game already lands on the PLAYER — creatures are not targets — so "direct
+damage" said nothing. `damage` therefore earns a rule of its own: **it ignores shields and it
+survives `block_attack`**, and it does not spend the shield it walked past either.
+
+- `takeHit(state, incoming, pierce)` subtracts the blockable part from the shield first, then
+  takes the pierce straight off health. Both sides have a shield
+  (`battles.shield` / `opponent_shield`), so the bot's own `shield` effects finally do something
+  and there is something to pierce in both directions.
+- A blocked creature still delivers its pierce: `combat.ts` zeroes `basicDamage` and
+  `effectDamage` and leaves `pierceDamage` standing. That is what makes a pierce power the
+  answer to a turtling opponent instead of one more number.
+- `TurnOutcome.totalPierce` is carried separately all the way to the database for the same
+  reason: merging the two channels at any point would silently make the needle blockable again.
+
+`damage_by_type` keeps the blockable channel and its `enemy_element` condition — it is the
+counter-pick, not the needle.
+
+## Campos — the battlefield as an opponent
+
+A second mode. `/jugar` offers **Empezar partida** (the ordinary fight) and **Jugar en un
+campo**, and a field is ROLLED SERVER-SIDE for the whole battle. The client asks for a MODE and
+never for a field: a field you can pick is a field you can farm, so `startBattleSchema` carries
+`mode` and nothing else, and which one came up is not knowable until the row exists.
+
+`core/fields` owns it, pure like the rest of `/core`. Ten fields:
+
+| campo | rule |
+| ----- | ---- |
+| **Remolino** | every tile changes place when the turn ends |
+| **Campo minado** | mines count down ONE PER MOVE; at zero they blow the square around them |
+| **Volcán** | one element falls three times as often |
+| **Sequía** | no drakofruta at all: nobody transforms |
+| **Vergel** | triple fruit: a race to transform first |
+| **Santuario** / **Páramo** | both sides heal / bleed at the end of every turn |
+| **Duelo** | ONE move per turn, but every gem is worth double mana |
+| **Resonancia** | the gems past the minimum pay triple: a five-run is enormous |
+| **Vendaval** | one random column rolls by one when the turn ends |
+
+### A field is a RULE, not composed data
+
+Creature effects are data because an admin will author hundreds of them. Fields are the
+opposite: ten, fixed, each one a sentence. So the VERB lives in code (`core/fields`) and only
+the tuning is a table (`FIELD_TUNING`). Composing them the way effects compose would buy
+nothing and cost legibility, and a field nobody can restate in one line is a field nobody will
+play around.
+
+**`tuneCombat(config, field)` hands back an ordinary `CombatConfig`**, which is why five of the
+ten needed no engine code at all: the tile bag, the move budget, `resolveTurn` and the bot all
+read that tuned config and never learn a field exists. `playMove` and `startBattle` tune once,
+at the top, and everything below them is the normal battle.
+
+- **The field is COPIED INTO THE ROW** (`battles.field`, JSONB, Zod-validated on every read and
+  write) for the same reason the mana costs are: retuning a field must not move the rules under
+  a fight in progress. `null` means the ordinary mode, and every reader treats it as "the normal
+  rules" rather than as a missing value.
+- **A mine is a CELL, not a tile.** Gems fall THROUGH it; it stays where it was laid. A fuse
+  that travelled with a tile would have to be threaded through gravity, and a mine that moved
+  when the board fell could not be read anyway. That is also why it is drawn as its own layer
+  over the board rather than on a gem.
+- **What a mine takes charges NOBODY.** `settleQuietly` clears the square, lets the board fall
+  and swallows whatever chain the refill sets off — no mana, no fruit, no damage. An explosion
+  has to be something that happens TO you; paid out as gems it would just be a free special.
+- **A blown mine is replaced.** The field stays dangerous for the whole battle instead of being
+  disarmed by waiting it out.
+- **A stirred board is re-checked, never trusted**: `afterTurn` refuses a shuffle that leaves an
+  alignment already made (which would pay somebody for the weather) or one with no legal move (a
+  field that can deadlock the game is a bug, not a difficulty), and falls back to a fresh board
+  after twelve tries.
+- **A field can END the battle.** `applyFieldTick` decides the status when the páramo drains the
+  last point, and a double knockout resolves as a win for the same reason your damage lands
+  first.
+- **Everything it does is ANNOUNCED** — the blast, the stir, the life it gave or took — because
+  a board that changes with no explanation reads as a glitch. `app/field-labels.ts` holds the
+  name and the one-line rule, printed above the board for the whole fight.
+
+> The opening board is now dealt from the WEIGHTED bag like every refill after it. It used to be
+> dealt flat, which made the first board a different game from the rest of the battle —
+> drakofruta on a sixth of the cells instead of a rare find — and the bag is also what carries a
+> field's own weighting.
 
 ## Playing — the web battle
 
@@ -185,6 +495,13 @@ server owns all of it.
   one transaction. Progress is only ever written there, from numbers the server computed.
 - `species.mana_cost` is per species and editable in the admin: a cheap bar fires often with a
   small effect, an expensive one takes building but lands hard.
+- **A dead board is rebuilt.** `createPlayableBoard` guarantees a legal move when the battle
+  starts, but a cascade can refill into a grid where nothing lines up — and from there only free
+  swaps remain, nobody charges anything, and the battle cannot progress. `playMove` therefore
+  re-checks with `hasValidMove` after the whole turn (yours and the bot's) and rolls a new board
+  when it is dead, reporting `reshuffled` so the player is told why the board changed under
+  them. The terminal simulator had this from the start; the web battle did not, and a player
+  could get stuck.
 
 ### Dragging and the replay — why there is no game engine
 
@@ -292,25 +609,44 @@ artwork replaces it.
 
 Both are inline SVG: they scale to any tile size, cost no request, and stay crisp on a phone.
 
-### Where drakofruta comes from
+### Drakofruta exists ONLY on the board
 
-Food falls off the board. **Drakofruta and coins are paid for clearing a wave**
-(`play.drakofrutaPerWin`, `play.coinsPerWin`), written inside the same transaction that resolved
-the winning move, so a reward cannot be claimed twice. Drakofruta is deliberately not a board
-tile: rare enough to protect the evolution economy would mean it almost never aligns, and common
-enough to align would make it farmable.
+There is no drakofruta in the player's pockets — no column, no reward, no counter anywhere. It
+is a tile you align, it fills the battle's shared bar, and it is gone when the battle ends.
+
+That is what makes it safe to farm: a tile you can grind must never pay a permanent power, and
+this one pays a power that expires. Food and coins are unaffected — food falls off the board,
+coins are paid for the win, both inside the transaction that resolved the move.
 
 > Adding a key to a config schema gives it a **default**, so rows written before that key existed
 > still parse. Without it, every battle would throw the moment the schema grew.
 
 ## Caring and evolving
 
-`/kriaturas` lists the roster with stamina derived per render; `/kriaturas/[id]` feeds, shows
-objective progress per path, locks a branch and evolves.
+`/kriaturas` lists the roster with stamina derived per render; `/kriaturas/[id]` feeds and shows
+what the creature would transform into. Neither can evolve anything: that happens in a battle.
 
-Feeding spends food and pulls the anchor backwards in one transaction, consuming only the units
-actually needed. Evolving recomputes the fruit cost from the config row rather than trusting the
-page that displayed it, and moves player and creature together in one transaction.
+### Seasons — nerfing and buffing without touching a species
+
+`/admin/temporadas` runs the balance. A season owns ADJUSTMENTS (`season_adjustments`), one per
+species, and they are applied on top of the species row wherever its numbers are read:
+
+- **Deltas, never absolute values.** `-3 attack` survives a change to the species' printed
+  attack; an absolute `9` would silently undo it.
+- **The species row is never rewritten.** Ending a season restores everyone with no migration,
+  and the note on each row says why it was touched.
+- **Clamped at 1** (`core/balance`): a nerf may make a creature weak, never harmless. Zero attack
+  would deal nothing for ever, and a zero-cost bar would fire a special on every match.
+- **Copied into the battle at the start.** `battles` and `battle_creatures` take the tuned mana
+  cost when the fight begins, so a balance change cannot move the floor under a fight in progress.
+- **Shown where the player CHOOSES**, not only where the battle resolves: the team picker and the
+  roster print the tuned numbers and say what the season did. A roster showing printed numbers
+  while the fight uses tuned ones is a roster that lies. They show the EFFECTIVE adjustment, so
+  an excellent creature that shrugged a nerf off simply shows no note.
+- **Excellent creatures take the buffs and ignore the nerfs.** Rivals are built from species
+  rather than from creatures, so they are never excellent and a nerf always reaches them.
+
+One season is active at a time, enforced by a partial unique index rather than by the caller.
 
 ## Brand
 
@@ -327,8 +663,9 @@ Three separate player-level pools, **never interchangeable**, no conversion rate
 | resource     | what it does                    |
 | ------------ | ------------------------------- |
 | `food`       | restores stamina. Common.       |
-| `drakofruta` | required to evolve. Rare.       |
 | `coins`      | buys eggs and shop items.       |
+
+Drakofruta is **not** in this table on purpose: it is a board tile, not a balance.
 
 ## Stamina model — security-critical
 
@@ -359,21 +696,87 @@ recomputation that the server later trusts.
 - All mutations are **server actions** with **Zod validation** on their input.
 - **Admin access is a role check in the database** (`users.role = 'admin'`), verified server-side
   on every admin request. A client-side role is never trusted.
-- Effects are **data, not code**: `damage`, `damage_by_type`, `heal`, `shield`, `combo_bonus`,
-  stored as validated JSONB (`core/effects/schema.ts`) and resolved by server-side primitives.
+- Effects are **data, not code**: eighteen types stored as validated JSONB
+  (`core/effects/schema.ts`) and resolved by server-side primitives. See *The powers*.
 
 ## Admin panel
 
 Species CRUD at `/admin/species` (list with element + published filters), `/admin/species/new`
-and `/admin/species/[id]` (edit, evolution paths, delete). No gameplay lives here.
+and `/admin/species/[id]` (edit, evolution paths, powers, delete). No gameplay lives here.
+
+### Building a kriatura by hand: the powers editor
+
+`app/admin/species/effects-editor.tsx` is where a creature stops being stats and becomes a
+character. It writes the species' effects and each PATH's effects, and it is the reason the
+eighteen primitives are worth having.
+
+- **The fields each power shows come from `core/effects/catalog.ts`**, a table beside the schema
+  holding every effect's bounds, its default target and the condition it cannot live without. A
+  form with its own `switch` drifts the day a bound moves, and drifts SILENTLY: it offers a
+  number the server then refuses. `tests/effect-catalog.test.ts` holds the two apart by checking
+  that every catalogue bound is a bound the schema really has, at both ends.
+- **`/core` stays language-free.** The catalogue is numbers and field names; the Spanish words
+  live in `app/admin/effect-labels.ts`, shared by the editor and the reference list.
+- **It submits ONE hidden field holding JSON**, and the action parses it with the same
+  `effectListSchema` the resolver reads with. The editor draws valid rows, but the editor is a
+  browser: a hand-written payload gets the validation, not the benefit of the doubt.
+- **An empty condition is removed, never sent empty** — `effectConditionSchema` refuses `{}`,
+  which is what stops "a condition nobody filled in" from reading as "no condition".
+- **A path can be edited in place** (`updatePathAction`), powers included. It has to be: a path a
+  creature has already locked in cannot be deleted, so "delete and re-add" was no way to retune a
+  transformed form. Its target element stays fixed, like the species' base element, because the
+  GRADE of the path is derived from that target.
+
+`/admin/poderes` prints the whole catalogue — every power, its fields and every condition —
+generated from the table rather than typed out, because a hand-written list of powers goes stale
+the first time one is added and a stale reference is the document someone designs a creature
+against.
 
 - `base_element` is **not editable** after creation: evolution paths and every creature's
-  attack trigger hang off it.
+  attack trigger hang off it. It can be **`sin elemento`**, which creates the four faces and the
+  four paths of a white species in the same transaction — visible as empty slots from the first
+  save, so an artist can see which ones still have no drawing.
+- The form **draws the creature as you type**. The generated art is what a species without an
+  uploaded image looks like everywhere else, so it is the only way to tell before saving that a
+  white species really comes out white.
 - The evolved element shown in the form is **read-only and derived**. It is never submitted;
   the server derives it again from the base element to create the default path.
 - Uploads go through the `ImageStorage` interface (`lib/storage`). The local adapter names
   files with a server-generated UUID — never the client's filename — and re-checks type and
   size. R2 later replaces that one file.
+
+## Identity — a door, not a login
+
+There is still no authentication. `lib/auth` falls back to the seeded account outside
+production and refuses everyone inside it, which is right for a laptop and useless on a server:
+a deployed game would tell every visitor "no hay jugador".
+
+**`/entrar` is the door.** A button creates a GUEST account (`createGuestPlayer`) and writes the
+session cookie. It is not a login and does not pretend to be one — there is no password, the
+cookie IS the identity, and anyone who copies it is that guest.
+
+- **A guest gets its OWN player and its own creatures**, never a shared demo account. One active
+  battle per player is a unique index, so two people on one account would fight over the same
+  row and the second would be refused with nothing on screen to explain it.
+- **Its starters are chosen from what is PUBLISHED**, one species per base element plus the white
+  one, rather than from a list of slugs the admin may have changed since. Two carry the rare
+  mark, because on a link somebody opens once, a mechanic nobody reaches may as well not exist.
+- **The role is hard-coded to `player`**, not passed in: this function is reachable by anyone who
+  opens the site, and an argument that could say `admin` would be an admin account anyone can
+  mint.
+- **Entering is a CLICK, not a page load.** Setting a cookie needs an action, and that constraint
+  turns out to be the right shape: a crawler opening the link mints nothing.
+- **`ALLOW_ADMIN_ENTRY=true`** adds a second door that hands out the seeded admin session, so the
+  panel can be reached from a phone. It is gated on an environment variable rather than on
+  anything the browser sends, and it is off unless set.
+- `/jugar` and `/kriaturas` **redirect to the door** when there is no player AND no dev fallback.
+  On a laptop they still say "run db:seed", because there it really does mean the database is
+  empty.
+
+See `DEPLOY.md` for putting it on a server. Two things bite there and both are documented in it:
+the database must be a real Postgres (`DATABASE_URL` is the only difference), and image uploads
+fail because the local storage adapter needs a writable disk — `LocalImageStorage` now says so
+in Spanish instead of surfacing `EROFS`.
 
 ### The layout is NOT a security boundary
 
@@ -401,7 +804,10 @@ Both read `users.role` from the database.
 - Any operation touching two tables (evolving spends fruits *and* flips `is_evolved`; buying an
   egg spends coins *and* inserts the egg) **runs inside a transaction**.
 - Config (`game_configs.value`) is JSONB validated by the Zod schema registered for its key:
-  `stamina`, `play`, `evolution`, `combat`, `eggs`.
+  `stamina`, `play`, `combat`, `eggs`.
+- **Removing a config key needs a migration of its own.** Adding one is covered by its Zod
+  default, but the schemas are `strictObject`, so a stored row that still carries a REMOVED key
+  throws on read. `0009` strips `drakofrutaPerWin` from the `play` row for exactly that reason.
 
 ## Migrations
 
@@ -411,6 +817,7 @@ Migrations from day one via Drizzle Kit. **Never `drizzle-kit push`.**
 npm run db:generate   # write a new migration from the schema
 npm run db:migrate    # apply migrations
 npm run db:seed       # sample species, paths, objectives, egg types
+npm run db:setup      # migrate + seed, for a database that has neither
 ```
 
 ## Commands
@@ -435,6 +842,29 @@ npm run match3 -- --enemy-hp=6       # longer fights, so specials get to fire
 ```
 
 Moves are typed as `fila,columna dirección`, e.g. `3,4 d` (a=up, b=down, i=left, d=right).
+
+### Reaching the end of a battle on purpose
+
+`scripts/dev-force-result.ts` exists so the win/loss screen can be looked at without grinding a
+fight out. Like the simulator it is a development tool, writes nothing the game could not write
+itself, and touches only the local database — so **run it with the dev server stopped**, since
+PGlite is a single-process file.
+
+```
+npx tsx scripts/dev-force-result.ts            # end the active battle as won
+npx tsx scripts/dev-force-result.ts lost
+npx tsx scripts/dev-force-result.ts hp 12      # short fights: retunes combat.playerMaxHp
+npx tsx scripts/dev-force-result.ts fruit 9 3  # drakofruta everywhere, cheap transformation
+npx tsx scripts/dev-force-result.ts shield 30 # arm the BOT, to watch a pierce walk through
+npx tsx scripts/dev-force-result.ts campo minado  # drop the active battle onto a field
+npx tsx scripts/dev-force-result.ts piedra albo water  # the elemental stone the game lacks
+npx tsx scripts/dev-force-result.ts nerf brasilla -4 2   # a season adjustment, by slug
+npx tsx scripts/dev-force-result.ts clear      # mark every unread result as seen
+```
+
+`clear` earns its place: because a result waits on screen until it is acknowledged, a testing
+session leaves a QUEUE of win screens for the next person to click through. `npm run db:seed`
+puts `playerMaxHp` back to its default.
 
 ### The dev server runs on port 3210, not 3000
 
@@ -468,6 +898,25 @@ npm run db:migrate && npm run db:seed
 
 Anything created by hand in the admin panel is not in the seed and does not survive this.
 **Stop the dev server with Ctrl+C rather than killing the process**, and this does not happen.
+
+#### Headless checks get their OWN database
+
+A browser check needs a server, and a server started from a tool cannot be stopped with Ctrl+C
+— killing it is how `.pglite` gets corrupted, and it has happened. So a throwaway server gets
+its own DATABASE, never the real data directory:
+
+```
+DATABASE_URL=file:./.pglite-check npm run db:migrate && npm run db:seed   # once
+DATABASE_URL=file:./.pglite-check npx next dev -p 3211
+```
+
+`.pglite-check` is disposable: if a hard kill damages it, delete it and reseed.
+
+**Give it a separate database, NOT a separate `distDir`.** `typedRoutes` writes the route union
+into `<distDir>/types/routes.d.ts`, and `tsconfig` feeds those types to `tsc`. A second copy
+under `.next-check/types` goes stale the moment a route is added, and then `npm run typecheck`
+rejects a `<Link href>` to a page that plainly exists. `NEXT_DIST_DIR` is for running TWO
+servers at once — nothing else.
 
 ### One dev server at a time
 
