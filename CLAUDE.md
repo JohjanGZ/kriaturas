@@ -874,6 +874,24 @@ against.
   attack trigger hang off it. It can be **`sin elemento`**, which creates the four faces and the
   four paths of a white species in the same transaction — visible as empty slots from the first
   save, so an artist can see which ones still have no drawing.
+
+### Creating a species creates BOTH grades
+
+`createSpecies` writes the two paths the design calls for: **normal** at its own element
+(+10/+5/+3, the default) and **superior** at the canonical pair (+13/+8/+6). It used to write
+ONE, aimed at the canonical element and marked default — which left the species with no ordinary
+evolution at all and handed the excellent-only form to every creature, the exact reverse of the
+rule.
+
+`createEvolutionPathSchema` accepted only EVOLVED targets, so the panel could not create a normal
+path even by hand; only the seed could, by writing the row directly. It takes either grade now,
+because both are legitimate and `pathTier` reads which from where the path points.
+
+The editor says so out loud: each path carries a **grade badge** and the sentence of who takes it
+("cualquier kriatura" / "solo las que llevan la marca ✦"), the add-form labels the species' own
+element as *la evolución normal*, and a species with no normal path gets a red notice — which is
+what heals the ones created before this was fixed. Each grade has its own image, bonuses and
+powers, because a transformed creature that looks identical is a transformation nobody notices.
 - The form **draws the creature as you type**. The generated art is what a species without an
   uploaded image looks like everywhere else, so it is the only way to tell before saving that a
   white species really comes out white.

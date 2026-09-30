@@ -151,14 +151,41 @@ export async function createSpecies(
       return row;
     }
 
-    const canonical = CANONICAL_EVOLUTIONS[input.baseElement satisfies BaseElement];
-    await tx.insert(evolutionPaths).values({
-      speciesId: row.id,
-      targetElement: canonical,
-      name: `Vía ${canonical}`,
-      isDefault: true,
-      sortOrder: 0,
-    });
+    /**
+     * BOTH GRADES, like the seed writes them.
+     *
+     * A species owns two paths and the grade is read from where they point:
+     * NORMAL at its own element, SUPERIOR at the canonical pair. This used to
+     * create one path aimed at the canonical element and mark it default —
+     * which left the species with no ordinary evolution at all and handed the
+     * excellent-only form to every creature, the exact opposite of the rule.
+     */
+    const base = input.baseElement satisfies BaseElement;
+    const canonical = CANONICAL_EVOLUTIONS[base];
+
+    await tx.insert(evolutionPaths).values([
+      {
+        speciesId: row.id,
+        targetElement: base,
+        name: `${input.name} mayor`,
+        hpBonus: 10,
+        attackBonus: 5,
+        defenseBonus: 3,
+        /** What an ORDINARY creature becomes, so it is the default. */
+        isDefault: true,
+        sortOrder: 0,
+      },
+      {
+        speciesId: row.id,
+        targetElement: canonical,
+        name: `${input.name} ${canonical}`,
+        hpBonus: 13,
+        attackBonus: 8,
+        defenseBonus: 6,
+        isDefault: false,
+        sortOrder: 1,
+      },
+    ]);
 
     return row;
   });

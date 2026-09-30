@@ -3,7 +3,12 @@
 import { useActionState } from 'react';
 import { useFormStatus } from 'react-dom';
 import type { Effect } from '@/core/effects/schema';
-import { EVOLVED_ELEMENTS, type EvolvedElement } from '@/core/elements';
+import {
+  EVOLVED_ELEMENTS,
+  type Element,
+  type EvolvedElement,
+  pathTier,
+} from '@/core/elements';
 import {
   type ActionState,
   createPathAction,
@@ -137,9 +142,27 @@ function PathRow({ path, speciesId }: { path: PathView; speciesId: string }) {
     <>
     <tr>
       <td>
+        {/*
+          * EL GRADO SE DERIVA DEL DESTINO, no de una columna que pudiera
+          * contradecirlo: si apunta a un elemento base es la evolución
+          * ordinaria, y si apunta a uno evolucionado es la de excelente.
+          * Decirlo aquí evita que alguien rellene la de excelente creyendo que
+          * la va a ver cualquier kriatura.
+          */}
+        <span className={`tag ${pathTier(path.targetElement as Element) === 'superior' ? 'tag-excellent' : ''}`}>
+          {pathTier(path.targetElement as Element) === 'superior' ? '✦ excelente' : 'normal'}
+        </span>{' '}
         <strong>{path.targetElement}</strong>
         {path.isDefault ? <span className="small muted"> · por defecto</span> : null}
         <div className="small muted">{path.name}</div>
+        <div className="small muted">
+          {pathTier(path.targetElement as Element) === 'superior'
+            ? 'Solo la toman las kriaturas con la marca ✦'
+            : 'La que toma cualquier kriatura al transformarse'}
+        </div>
+        {path.imageUrl ? null : (
+          <div className="small muted">⚠ sin imagen: se dibujará el arte generado</div>
+        )}
         {deleteState.message && !deleteState.ok ? (
           <div className="error">{deleteState.message}</div>
         ) : null}
@@ -184,25 +207,53 @@ function PathRow({ path, speciesId }: { path: PathView; speciesId: string }) {
 
 export function PathEditor({
   speciesId,
+  baseElement,
   paths,
 }: {
   speciesId: string;
+  /** Null for a white species, which has four of each grade instead of one. */
+  baseElement: string | null;
   paths: PathView[];
 }) {
   const [state, formAction] = useActionState(createPathAction, { ok: false } satisfies ActionState);
 
   const taken = new Set(paths.map((path) => path.targetElement));
-  const available = EVOLVED_ELEMENTS.filter(
-    (element: EvolvedElement) => !taken.has(element),
-  );
+
+  /**
+   * Both grades are offered: the species' OWN element is the normal evolution
+   * and the evolved ones are the excellent-only forms. Offering only the second
+   * half is what left species created in the panel with no ordinary path at all.
+   */
+  const available: string[] = [
+    ...(baseElement && !taken.has(baseElement) ? [baseElement] : []),
+    ...EVOLVED_ELEMENTS.filter((element: EvolvedElement) => !taken.has(element)),
+  ];
+
+  /** A species with no ordinary path hands the excellent form to everybody. */
+  const missingNormal = baseElement !== null && !taken.has(baseElement);
 
   return (
     <section className="card">
-      <h2>Vías de evolución</h2>
+      <h2>Las dos evoluciones</h2>
       <p className="small muted">
-        Una especie puede ofrecer varias. El jugador elige una por kriatura y esa elección
-        es permanente, así que una vía que alguien ya eligió no se puede borrar.
+        Cada especie nace con dos, y el <strong>grado se lee del elemento al que apuntan</strong>:
+        si es su propio elemento es la <strong>normal</strong>, la que toma cualquier kriatura al
+        transformarse en la partida; si es el elemento superior es la de{' '}
+        <strong>excelente</strong>, reservada a las que llevan la marca ✦.
       </p>
+      <p className="small muted">
+        Abre «Editar» en cada una para ponerle su <strong>imagen</strong>, sus bonus y sus
+        poderes. Son dos dibujos distintos: una kriatura transformada que se ve igual que antes
+        es una transformación que no se nota.
+      </p>
+
+      {missingNormal ? (
+        <p className="notice notice-error">
+          <strong>Falta la evolución normal.</strong> Sin una vía que apunte a{' '}
+          <strong>{baseElement}</strong>, cualquier kriatura que se transforme acabará tomando la
+          de excelente. Créala abajo eligiendo «{baseElement}» como elemento destino.
+        </p>
+      ) : null}
 
       <table>
         <thead>
@@ -221,6 +272,10 @@ export function PathEditor({
       </table>
 
       <h3 style={{ marginTop: '1.2rem' }}>Añadir una vía</h3>
+      <p className="small muted">
+        El elemento destino decide el grado: el propio de la especie es la evolución normal,
+        cualquier otro es una forma solo para excelentes.
+      </p>
 
       {available.length === 0 ? (
         <p className="small muted">
@@ -243,6 +298,7 @@ export function PathEditor({
                 {available.map((element) => (
                   <option key={element} value={element}>
                     {element}
+                    {element === baseElement ? ' — la evolución normal' : ' — solo excelentes'}
                   </option>
                 ))}
               </select>

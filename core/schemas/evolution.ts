@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { evolvedElementSchema } from '../elements';
+import { elementSchema } from '../elements';
 import { effectListSchema } from '../effects/schema';
 
 /**
@@ -14,13 +14,24 @@ import { effectListSchema } from '../effects/schema';
  * admin defined for that species, and the server re-checks that the path really
  * belongs to the creature's species before writing anything.
  *
- * The target element must be an EVOLVED element: a path can never point back at
- * a base element, because the board and the attack trigger stay on base elements.
+ * THE TARGET DECIDES THE GRADE, and both grades are legitimate:
+ *
+ * - pointing at the species' OWN base element is the NORMAL evolution, the one
+ *   any creature takes (fire -> fire: same colours, better numbers);
+ * - pointing at an EVOLVED element is the SUPERIOR form, which only a creature
+ *   carrying the rare mark may take.
+ *
+ * So a base element is accepted here. It used to be refused, which meant the
+ * admin panel could not create a normal path at all — only the seed could, by
+ * writing the row directly.
+ *
+ * None of this touches the attack trigger: a creature always fires on its
+ * species' base element, transformed or not.
  */
 
 export const createEvolutionPathSchema = z.strictObject({
   speciesId: z.uuid(),
-  targetElement: evolvedElementSchema,
+  targetElement: elementSchema,
   name: z.string().trim().min(2).max(80),
   imagePath: z.string().trim().min(1).max(512).nullable().default(null),
   description: z.string().trim().max(2000).nullable().default(null),

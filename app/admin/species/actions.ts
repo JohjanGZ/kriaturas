@@ -3,7 +3,7 @@
 import { revalidatePath } from 'next/cache';
 import { redirect } from 'next/navigation';
 import { z } from 'zod';
-import { baseElementSchema, evolvedElementSchema } from '@/core/elements';
+import { baseElementSchema, elementSchema } from '@/core/elements';
 import { createEvolutionPathSchema, updateEvolutionPathSchema } from '@/core/schemas/evolution';
 import { createSpeciesSchema, updateSpeciesSchema } from '@/core/schemas/species';
 import {
@@ -267,8 +267,11 @@ export async function createPathAction(
 
     const parsed = createEvolutionPathSchema.safeParse({
       speciesId: text(form, 'speciesId'),
-      /** Only evolved elements are accepted; a base element has nowhere to go. */
-      targetElement: evolvedElementSchema.parse(text(form, 'targetElement')),
+      /**
+       * Either grade: a base element is the ordinary evolution, an evolved one
+       * the excellent-only form. `pathTier` reads which from the target.
+       */
+      targetElement: elementSchema.parse(text(form, 'targetElement')),
       name: text(form, 'name'),
       description: nullable(text(form, 'description')),
       imagePath: await storeImage(form, 'image'),

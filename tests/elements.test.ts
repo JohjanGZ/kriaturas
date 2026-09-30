@@ -1,14 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import {
-  BASE_ELEMENTS,
-  CANONICAL_EVOLUTIONS,
-  ELEMENTS,
-  EVOLVED_ELEMENTS,
-  defaultEvolvedElementFor,
-  isBaseElement,
-  isEvolvedElement,
-  triggerElementFor,
-} from '@/core/elements';
+import { BASE_ELEMENTS, CANONICAL_EVOLUTIONS, ELEMENTS, EVOLVED_ELEMENTS, defaultEvolvedElementFor, isBaseElement, isEvolvedElement, pathTier, superiorElementFor, triggerElementFor } from '@/core/elements';
 import { BOARD_TILE_KINDS, attackPowerFor, damageForMatch, isElementTile } from '@/core/match3';
 import type { CombatConfig } from '@/core/schemas/config';
 
@@ -121,5 +112,35 @@ describe('damage', () => {
 
   it('deals nothing below the minimum match length', () => {
     expect(damageForMatch({ power: 10, matchLength: 2 }, combat)).toBe(0);
+  });
+});
+
+/**
+ * THE GRADE IS READ FROM THE TARGET, never from a column that could contradict
+ * it. Both halves are legitimate paths, and the admin panel now creates both —
+ * it used to make only the superior one and mark it default, which handed the
+ * excellent-only form to every ordinary creature.
+ */
+describe('pathTier', () => {
+  it('a path at a BASE element is the ordinary evolution', () => {
+    expect(pathTier('fire')).toBe('normal');
+    expect(pathTier('water')).toBe('normal');
+    expect(pathTier('plant')).toBe('normal');
+    expect(pathTier('psychic')).toBe('normal');
+  });
+
+  it('a path at an EVOLVED element is the excellent-only form', () => {
+    expect(pathTier('light')).toBe('superior');
+    expect(pathTier('ice')).toBe('superior');
+    expect(pathTier('poison')).toBe('superior');
+    expect(pathTier('astral')).toBe('superior');
+    expect(pathTier('rock')).toBe('superior');
+  });
+
+  it('agrees with the canonical pair: the superior of a base is superior', () => {
+    for (const base of BASE_ELEMENTS) {
+      expect(pathTier(base)).toBe('normal');
+      expect(pathTier(superiorElementFor(base))).toBe('superior');
+    }
   });
 });

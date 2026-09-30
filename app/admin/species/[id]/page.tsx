@@ -88,7 +88,11 @@ export default async function EditSpeciesPage({
         />
       ) : null}
 
-      <PathEditor speciesId={species.id} paths={paths} />
+      <PathEditor
+        speciesId={species.id}
+        baseElement={species.baseElement}
+        paths={paths}
+      />
 
       <section className="card">
         <h2>Zona peligrosa</h2>

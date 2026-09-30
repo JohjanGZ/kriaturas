@@ -1,5 +1,5 @@
 import { and, asc, eq, ne } from 'drizzle-orm';
-import type { EvolvedElement } from '@/core/elements';
+import type { Element } from '@/core/elements';
 import type {
   CreateEvolutionPathInput,
   UpdateEvolutionPathInput,
@@ -22,7 +22,8 @@ export async function createPath(input: CreateEvolutionPathInput): Promise<Evolu
     .insert(evolutionPaths)
     .values({
       speciesId: input.speciesId,
-      targetElement: input.targetElement satisfies EvolvedElement,
+      /** Either grade: `pathTier` reads which one from where it points. */
+      targetElement: input.targetElement satisfies Element,
       name: input.name,
       description: input.description,
       imagePath: input.imagePath,
