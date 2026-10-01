@@ -128,7 +128,15 @@ function PathEditForm({ path, speciesId }: { path: PathView; speciesId: string }
   );
 }
 
-function PathRow({ path, speciesId }: { path: PathView; speciesId: string }) {
+function PathRow({
+  path,
+  speciesId,
+  openByDefault,
+}: {
+  path: PathView;
+  speciesId: string;
+  openByDefault: boolean;
+}) {
   const [defaultState, makeDefault] = useActionState(setDefaultPathAction, {
     ok: false,
   } satisfies ActionState);
@@ -193,7 +201,19 @@ function PathRow({ path, speciesId }: { path: PathView; speciesId: string }) {
     </tr>
     <tr>
       <td colSpan={4}>
-        <details>
+        {/*
+          * ABIERTO DE ENTRADA cuando son pocas.
+          *
+          * Aquí dentro vive TODO lo de una evolución: su imagen, sus bonus y
+          * sus poderes. Plegado se reportó dos veces como "no hay forma de
+          * subir la imagen" y "no hay forma de crear la habilidad de
+          * excelente" — y las dos estaban aquí. Un desplegable que esconde lo
+          * principal no es orden, es un sitio donde las cosas se pierden.
+          *
+          * Una especie normal tiene dos vías y caben abiertas. Una blanca tiene
+          * ocho, y ahí sí conviene plegarlas.
+          */}
+        <details open={openByDefault}>
           <summary className="path-open">
             ⚙ Editar <strong>{path.name}</strong> — imagen, bonus y{' '}
             <strong>
@@ -248,9 +268,9 @@ export function PathEditor({
         <strong>excelente</strong>, reservada a las que llevan la marca ✦.
       </p>
       <p className="small muted">
-        <strong>Los poderes de cada grado se editan aquí abajo</strong>, en el ⚙ de su fila —
-        junto con su imagen y sus bonus. Los de la vía <strong>superior</strong> son los que solo
-        verá una kriatura con la marca ✦; los de la normal, todas las demás.
+        Debajo de cada vía están <strong>su imagen, sus bonus y sus poderes</strong>. La vía{' '}
+        <strong>normal</strong> es la que toma cualquier kriatura; la <strong>superior</strong>,
+        solo las que llevan la marca ✦ — cada una con su propio dibujo y sus propios poderes.
       </p>
       <p className="small muted">
         Son dos dibujos distintos: una kriatura transformada que se ve igual que antes es una
@@ -276,7 +296,12 @@ export function PathEditor({
         </thead>
         <tbody>
           {paths.map((path) => (
-            <PathRow key={path.id} path={path} speciesId={speciesId} />
+            <PathRow
+              key={path.id}
+              path={path}
+              speciesId={speciesId}
+              openByDefault={paths.length <= 3}
+            />
           ))}
         </tbody>
       </table>

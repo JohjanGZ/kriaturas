@@ -4,10 +4,12 @@ import { useActionState, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { useFormStatus } from 'react-dom';
 import type { CorralShelf, PennedCreature } from '@/db/queries/corral';
+import { AffinityFace, affinityLabel } from '../affinity-face';
 import { CreatureArt, type ArtElement } from '../creature-art';
 import {
   type CorralActionState,
   buyCorralAction,
+  checkNestAction,
   cureAction,
   feedInCorralAction,
   useStoneAction,
@@ -106,6 +108,8 @@ function Grazing({
           🤒
         </span>
       ) : null}
+      {/* La afinidad, leída sin leer: la boca cambia de forma, no solo el color. */}
+      <AffinityFace percent={creature.affinity} className="grazing-face" />
       <span className="grazing-name">{creature.name}</span>
     </button>
   );
@@ -119,6 +123,9 @@ export function Pen({ shelf }: { shelf: CorralShelf }) {
   const [buy, doBuy] = useActionState(buyCorralAction, { ok: false } satisfies CorralActionState);
   const [cure, doCure] = useActionState(cureAction, { ok: false } satisfies CorralActionState);
   const [stone, doStone] = useActionState(useStoneAction, {
+    ok: false,
+  } satisfies CorralActionState);
+  const [nest, doNest] = useActionState(checkNestAction, {
     ok: false,
   } satisfies CorralActionState);
 
@@ -144,6 +151,34 @@ export function Pen({ shelf }: { shelf: CorralShelf }) {
       {stone.message ? (
         <p className={`notice ${stone.ok ? 'notice-ok' : 'notice-error'}`}>{stone.message}</p>
       ) : null}
+      {nest.message ? (
+        <p className={`notice ${nest.ok ? 'notice-ok' : 'notice-error'}`}>{nest.message}</p>
+      ) : null}
+
+      {/*
+        * EL NIDO. La probabilidad se enseña: un dado escondido no se distingue
+        * de estar haciendo algo mal, y aquí lo que sube la cifra --cuidar a las
+        * kriaturas-- es justo lo que queremos que el jugador entienda.
+        */}
+      <section className="card">
+        <div className="row" style={{ justifyContent: 'space-between', alignItems: 'baseline' }}>
+          <h2 style={{ margin: 0 }}>El nido</h2>
+          <span className="small muted">
+            {shelf.nest.high} con afinidad alta · {shelf.nest.chance}% hoy
+          </span>
+        </div>
+        <p className="small muted">
+          Las kriaturas a las que cuidas y con las que juegas pueden poner un huevo. Cuantas más
+          tengas contentas, más probable — con un tope del 20%.
+        </p>
+        {shelf.nest.checkedToday ? (
+          <p className="small muted">Ya miraste hoy. Vuelve mañana.</p>
+        ) : (
+          <form action={doNest}>
+            <Pending primary label="Mirar el nido" />
+          </form>
+        )}
+      </section>
 
       {shelf.corrals.map((pen) => (
         <section key={pen.id} className="card">
@@ -209,6 +244,11 @@ export function Pen({ shelf }: { shelf: CorralShelf }) {
               <div className="small muted">
                 {chosen.speciesName} ·{' '}
                 {chosen.element ?? 'sin elemento — necesita una piedra'}
+              </div>
+              <div className="small" style={{ display: 'flex', alignItems: 'center', gap: '0.3rem' }}>
+                <AffinityFace percent={chosen.affinity} className="care-face" />
+                Afinidad {chosen.affinity}/100 — {affinityLabel(chosen.affinity)}
+                {chosen.highAffinity ? ' · cuenta para el nido' : ''}
               </div>
               <div className="small">
                 Ataque {chosen.attack} · maná {chosen.manaCost}

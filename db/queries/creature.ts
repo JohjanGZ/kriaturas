@@ -1,6 +1,8 @@
 import { and, asc, eq, inArray, isNull } from 'drizzle-orm';
 import { applyAdjustment, effectiveAdjustment } from '@/core/balance';
+import { addAffinity } from '@/core/affinity';
 import { type BaseElement, resolveElement } from '@/core/elements';
+import { staminaCeiling } from '@/core/health';
 import { feed } from '@/core/stamina';
 import type { StaminaConfig } from '@/core/schemas/config';
 import { getDb } from '../client';
@@ -218,7 +220,14 @@ export async function getCreatureDetail(
 export type FeedFailure = 'not_found' | 'no_food' | 'already_full';
 
 export type FeedResultRow =
-  | { ok: true; unitsConsumed: number; staminaBefore: number; staminaAfter: number }
+  | {
+      ok: true;
+      unitsConsumed: number;
+      staminaBefore: number;
+      staminaAfter: number;
+      /** Dónde quedó la afinidad: cuidarla es lo que la sube. */
+      affinity: number;
+    }
   | { ok: false; reason: FeedFailure };
 
 /**
@@ -249,13 +258,34 @@ export async function feedCreature(
   if (player.food < 1) return { ok: false, reason: 'no_food' };
 
   const available = Math.min(units, player.food);
-  const result = feed(creature.lastFed, now, available, config.stamina satisfies StaminaConfig);
+  /** Una kriatura enferma come, pero no pasa de su techo. */
+  const result = feed(
+    creature.lastFed,
+    now,
+    available,
+    config.stamina satisfies StaminaConfig,
+    staminaCeiling(creature.sickSince !== null, config.health, config.stamina),
+  );
   if (!result.ok) return { ok: false, reason: 'already_full' };
+
+  /**
+   * ALIMENTAR SUBE LA AFINIDAD, y se suma sobre el valor de HOY — no sobre el
+   * guardado. Sumar sobre lo guardado resucitaría de golpe todo lo que el
+   * tiempo se había llevado: una kriatura olvidada un mes volvería a tope con
+   * una sola comida.
+   */
+  const affinity = addAffinity(
+    creature.affinityPoints,
+    creature.affinityAt,
+    now,
+    config.affinity.perFeed,
+    config.affinity,
+  );
 
   await db.transaction(async (tx) => {
     await tx
       .update(creatures)
-      .set({ lastFed: result.lastFed })
+      .set({ lastFed: result.lastFed, affinityPoints: affinity, affinityAt: now })
       .where(eq(creatures.id, creatureId));
     await tx
       .update(players)
@@ -268,6 +298,7 @@ export async function feedCreature(
     unitsConsumed: result.unitsConsumed,
     staminaBefore: result.staminaBefore,
     staminaAfter: result.staminaAfter,
+    affinity,
   };
 }
 

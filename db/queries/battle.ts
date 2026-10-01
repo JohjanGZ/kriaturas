@@ -18,6 +18,7 @@ import {
   applyRivalMove,
   applyRivalStrike,
   armField,
+  addAffinity,
   canEvolveInBattle,
   fallsIll,
   chooseBotMove,
@@ -475,6 +476,8 @@ export async function startBattle(
       speciesElement: species.baseElement,
       awakenedElement: creatures.element,
       sickSince: creatures.sickSince,
+      affinityPoints: creatures.affinityPoints,
+      affinityAt: creatures.affinityAt,
     })
     .from(creatures)
     .innerJoin(species, eq(species.id, creatures.speciesId))
@@ -689,10 +692,25 @@ export async function startBattle(
             )
           : false;
 
+        /**
+         * PELEAR CON ELLA SUBE LA AFINIDAD, y más que darle de comer: lo que
+         * de verdad une a alguien con una kriatura es llevarla, no llenarle el
+         * cuenco. Se suma sobre el valor de hoy, nunca sobre el guardado.
+         */
+        const affinity = addAffinity(
+          entry.row.affinityPoints,
+          entry.row.affinityAt,
+          now,
+          config.affinity.perBattle,
+          config.affinity,
+        );
+
         await tx
           .update(creatures)
           .set({
             lastFed: entry.spend.lastFed,
+            affinityPoints: affinity,
+            affinityAt: now,
             ...(sick ? { sickSince: now } : {}),
           })
           .where(eq(creatures.id, entry.row.id));

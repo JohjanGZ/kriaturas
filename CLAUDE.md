@@ -269,6 +269,47 @@ La cura se limpia con `WHERE sick_since IS NOT NULL` y no según la lectura prev
 compradas a la vez pasarían las dos una comprobación hecha en TypeScript, y la segunda no puede
 cobrar por nada.
 
+### Afinidad — lo que una kriatura siente por quien la cuida
+
+Sube **alimentándola** (+5) y sobre todo **llevándola a pelear** (+8): lo que une a alguien con
+una kriatura es llevarla, no llenarle el cuenco. Y **baja sola** si la tienes abandonada.
+
+Esa bajada es una decisión de diseño que va contra la regla que gobierna la stamina —la
+ausencia nunca quita nada— así que está **confinada a `core/affinity` y a ningún otro sitio**:
+nada más en el juego decae con el reloj. Y lleva un **suelo** (`floorPoints`), porque una
+kriatura con la que jugaste cien horas no vuelve a ser una desconocida por dos semanas de
+vacaciones. La ausencia enfría, no borra.
+
+- **No se almacena el valor, se almacena LO GANADO.** `affinity_points` + `affinity_at`, y el
+  presente se deriva al leer — igual que la stamina sale de `last_fed`. Un número que alguien
+  tiene que ir bajando necesita una tarea de fondo, y una tarea de fondo es otro reloj que puede
+  desincronizarse.
+- **Se suma sobre el valor de HOY, nunca sobre lo guardado.** Sumar sobre lo guardado
+  resucitaría de golpe todo lo que el tiempo se llevó: una kriatura olvidada un mes volvería a
+  tope con una sola comida. `addAffinity` normaliza y después suma, igual que `feed` con el
+  ancla.
+- **Se lee como una CARA** (`app/affinity-face.tsx`), de gris con la boca recta a verde
+  contenta. Un número no dice nada emocional y una barra parece una estadística más. El color
+  nunca es la única señal: **la boca cambia de forma** en cada escalón, así que quien no
+  distingue el verde del gris sigue viendo una línea recta convertirse en una sonrisa.
+
+#### El nido — una tirada al día
+
+Las kriaturas en **afinidad alta** pueden poner un huevo. La probabilidad sube con cuántas
+tengas contentas y **nunca pasa del 20%** (`maxChancePercent`): ese techo es lo que mantiene el
+corral como un extra, con la tienda de camino fiable y la mina de afortunado.
+
+- **Una vez al día, guardada en una fecha** (`players.last_nest_check`). Si la tirada ocurriera
+  al cargar la página bastaría con recargar hasta que saliera huevo — el mismo agujero que el
+  registro de días pagados cierra con su índice único, resuelto igual.
+- **La probabilidad SE ENSEÑA.** Un dado escondido no se distingue de estar haciendo algo mal, y
+  aquí lo que sube la cifra —cuidar a las kriaturas— es justo lo que el jugador tiene que
+  entender.
+- **Sin incubadora libre no se tira.** Mejor decir "no cabe" que gastar la tirada del día en un
+  huevo que no puede existir. El huevo ocupa slot de incubadora, no plaza de corral.
+- La especie se sortea server-side como en cualquier otro huevo, y sigue oculta hasta que
+  eclosiona.
+
 ### A still image that walks
 
 The creatures will be fixed artwork, so the animation is not of the DRAWING — it is of its

@@ -1,10 +1,26 @@
 import { and, asc, eq, isNotNull, isNull } from 'drizzle-orm';
 import { type BaseElement, resolveElement } from '@/core/elements';
+import {
+  deriveAffinity,
+  isHighAffinity,
+  nestChance,
+  nestLaysEgg,
+} from '@/core/affinity';
 import { applyAdjustment, effectiveAdjustment } from '@/core/balance';
+import { careDateFor, rollSpeciesFromPool } from '@/core/eggs';
 import { staminaCeiling } from '@/core/health';
 import { deriveStamina } from '@/core/stamina';
 import { getDb } from '../client';
-import { corrals, creatures, players, species } from '../schema';
+import {
+  corrals,
+  creatures,
+  eggTypeSpecies,
+  eggTypes,
+  eggs,
+  incubators,
+  players,
+  species,
+} from '../schema';
 import { loadGameConfig } from './battle';
 import { adjustmentFor, loadSeasonBalance } from './season';
 
@@ -36,6 +52,10 @@ export type PennedCreature = {
   curePrice: number;
   /** Lo que cuesta la piedra que despierta a una blanca. */
   stonePrice: number;
+  /** Afinidad de HOY, 0..100, ya con lo que el tiempo se llevó descontado. */
+  affinity: number;
+  /** Si cuenta para el nido. */
+  highAffinity: boolean;
   /**
    * Los números con los que se compara una kriatura, YA AJUSTADOS por la
    * temporada. El corral sustituye al listado de "mis kriaturas", así que tiene
@@ -58,6 +78,8 @@ export type CorralView = {
 
 export type CorralShelf = {
   corrals: CorralView[];
+  /** El nido: cuántas en afinidad alta, qué probabilidad hay y si ya se miró. */
+  nest: { high: number; chance: number; checkedToday: boolean };
   /** Creatures with no corral — born before there were any. */
   loose: PennedCreature[];
   forSale: { capacity: number; priceCoins: number }[];
@@ -89,6 +111,8 @@ export async function getCorralShelf(playerId: string, now: Date): Promise<Corra
       isExcellent: creatures.isExcellent,
       corralId: creatures.corralId,
       sickSince: creatures.sickSince,
+      affinityPoints: creatures.affinityPoints,
+      affinityAt: creatures.affinityAt,
       awakenedElement: creatures.element,
       speciesName: species.name,
       speciesElement: species.baseElement,
@@ -120,7 +144,12 @@ export async function getCorralShelf(playerId: string, now: Date): Promise<Corra
     });
     const tuned = applyAdjustment({ attack: row.attack, manaCost: row.manaCost }, adjustment);
 
+    /** Derivada, nunca leída de una columna: lo ganado menos lo que el tiempo se llevó. */
+    const affinity = deriveAffinity(row.affinityPoints, row.affinityAt, now, config.affinity);
+
     return {
+      affinity,
+      highAffinity: isHighAffinity(affinity, config.affinity),
       id: row.id,
       name: row.nickname ?? row.speciesName,
       speciesName: row.speciesName,
@@ -141,7 +170,15 @@ export async function getCorralShelf(playerId: string, now: Date): Promise<Corra
     };
   };
 
+  const everyone = rows.map(toView);
+  const high = everyone.filter((one) => one.highAffinity).length;
+
   return {
+    nest: {
+      high,
+      chance: nestChance(high, config.affinity),
+      checkedToday: player.lastNestCheck === careDateFor(now, config.eggs),
+    },
     corrals: pens.map((pen) => ({
       id: pen.id,
       name: pen.name,
@@ -440,5 +477,118 @@ export async function useElementStone(
     }
 
     return { ok: true as const, paid: price };
+  });
+}
+
+export type NestResult =
+  | { ok: true; laid: false; chance: number }
+  | { ok: true; laid: true; chance: number; from: string }
+  | { ok: false; reason: 'already_checked' | 'no_room' | 'no_egg_type' };
+
+/**
+ * EL NIDO — una tirada al día, y solo una.
+ *
+ * La probabilidad sube con cuántas kriaturas tienes en afinidad ALTA y nunca
+ * pasa del tope (`maxChancePercent`). Ese techo es lo que mantiene al corral
+ * como un extra: la tienda sigue siendo el camino fiable y ninguna cantidad de
+ * kriaturas lo convierte en una fábrica.
+ *
+ * **Una vez al día, guardado en una fecha.** Si la tirada ocurriera al cargar
+ * la página bastaría con recargar hasta que saliera huevo — el mismo agujero
+ * que el registro de días pagados cierra con su índice único, resuelto igual:
+ * la fecha se escribe en la misma transacción que mira si ya se tiró.
+ *
+ * Y el huevo que sale ocupa **slot de incubadora**, no plaza de corral: si no
+ * hay sitio, no se tira. Mejor decir "no cabe" que gastar la tirada del día en
+ * un huevo que no puede existir.
+ */
+export async function checkNest(playerId: string, now: Date): Promise<NestResult> {
+  const db = await getDb();
+  const config = await loadGameConfig();
+  const today = careDateFor(now, config.eggs);
+
+  return db.transaction(async (tx) => {
+    const [player] = await tx.select().from(players).where(eq(players.id, playerId)).limit(1);
+    if (!player) return { ok: false as const, reason: 'already_checked' as const };
+    if (player.lastNestCheck === today) {
+      return { ok: false as const, reason: 'already_checked' as const };
+    }
+
+    /** Un huevo necesita incubadora libre: sin sitio no se gasta la tirada. */
+    const owned = await tx.select().from(incubators).where(eq(incubators.playerId, playerId));
+    const busy = await tx
+      .select({ incubatorId: eggs.incubatorId })
+      .from(eggs)
+      .where(and(eq(eggs.playerId, playerId), eq(eggs.status, 'incubating')));
+    const taken = new Set(busy.map((row) => row.incubatorId));
+    const idle = owned.find((row) => !taken.has(row.id));
+    if (!idle) return { ok: false as const, reason: 'no_room' as const };
+
+    const mine = await tx
+      .select({
+        id: creatures.id,
+        nickname: creatures.nickname,
+        speciesName: species.name,
+        affinityPoints: creatures.affinityPoints,
+        affinityAt: creatures.affinityAt,
+      })
+      .from(creatures)
+      .innerJoin(species, eq(species.id, creatures.speciesId))
+      .where(eq(creatures.playerId, playerId));
+
+    const high = mine.filter((row) =>
+      isHighAffinity(
+        deriveAffinity(row.affinityPoints, row.affinityAt, now, config.affinity),
+        config.affinity,
+      ),
+    );
+    const chance = nestChance(high.length, config.affinity);
+
+    /** La fecha se escribe pase lo que pase: la tirada del día se gastó. */
+    await tx
+      .update(players)
+      .set({ lastNestCheck: today })
+      .where(eq(players.id, playerId));
+
+    if (!nestLaysEgg(high.length, config.affinity, Math.random)) {
+      return { ok: true as const, laid: false as const, chance };
+    }
+
+    /** El huevo del nido sale del tipo más barato publicado: es un regalo. */
+    const [type] = await tx
+      .select()
+      .from(eggTypes)
+      .where(eq(eggTypes.isPublished, true))
+      .orderBy(asc(eggTypes.priceAmount))
+      .limit(1);
+    if (!type) return { ok: false as const, reason: 'no_egg_type' as const };
+
+    const pool = await tx
+      .select({ speciesId: eggTypeSpecies.speciesId, weight: eggTypeSpecies.weight })
+      .from(eggTypeSpecies)
+      .innerJoin(species, eq(species.id, eggTypeSpecies.speciesId))
+      .where(and(eq(eggTypeSpecies.eggTypeId, type.id), eq(species.isPublished, true)));
+    if (pool.length === 0) return { ok: false as const, reason: 'no_egg_type' as const };
+
+    /** La especie se sortea aquí, server-side, como en cualquier otro huevo. */
+    const rolled = rollSpeciesFromPool(pool, Math.random);
+    const mother = high[Math.min(high.length - 1, Math.floor(Math.random() * high.length))];
+
+    await tx.insert(eggs).values({
+      playerId,
+      eggTypeId: type.id,
+      speciesId: rolled,
+      /** Lo puso una kriatura: no se pagó nada, pero la columna exige un número. */
+      paidAmount: 1,
+      paidResource: type.priceResource,
+      incubatorId: idle.id,
+    });
+
+    return {
+      ok: true as const,
+      laid: true as const,
+      chance,
+      from: mother?.nickname ?? mother?.speciesName ?? 'una de tus kriaturas',
+    };
   });
 }

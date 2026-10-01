@@ -4,7 +4,13 @@ import { revalidatePath } from 'next/cache';
 import { z } from 'zod';
 import { feedCreatureSchema } from '@/core/schemas/creature';
 import { BASE_ELEMENTS } from '@/core/elements';
-import { buyCorral, cureCreature, moveCreature, useElementStone } from '@/db/queries/corral';
+import {
+  buyCorral,
+  checkNest,
+  cureCreature,
+  moveCreature,
+  useElementStone,
+} from '@/db/queries/corral';
 import { feedCreature } from '@/db/queries/creature';
 import { getCurrentPlayer } from '@/lib/auth';
 
@@ -27,6 +33,9 @@ const REASONS: Record<string, string> = {
   not_sick: 'Esa kriatura no está enferma',
   species_has_its_own_element: 'Esa kriatura ya tiene elemento propio',
   already_awakened: 'Esa kriatura ya despertó',
+  already_checked: 'Ya miraste el nido hoy. Vuelve mañana.',
+  no_room: 'No hay incubadora libre donde poner un huevo',
+  no_egg_type: 'No hay ningún tipo de huevo publicado',
 };
 
 const describe = (reason: string): string => REASONS[reason] ?? 'No se pudo completar';
@@ -164,4 +173,28 @@ export async function useStoneAction(
         message: `¡Despertó como ${parsed.data.element}! Pagaste ${result.paid} monedas.`,
       }
     : { ok: false, message: describe(result.reason) };
+}
+
+/**
+ * Mirar el nido. UNA vez al día — si rodara al cargar la página bastaría con
+ * recargar hasta que saliera huevo.
+ */
+export async function checkNestAction(
+  _prev: CorralActionState,
+  _form: FormData,
+): Promise<CorralActionState> {
+  const player = await getCurrentPlayer();
+  if (!player) return { ok: false, message: 'No hay jugador' };
+
+  const result = await checkNest(player.id, new Date());
+  revalidatePath('/corral');
+  revalidatePath('/huevos');
+
+  if (!result.ok) return { ok: false, message: describe(result.reason) };
+  return result.laid
+    ? { ok: true, message: `¡${result.from} puso un huevo! Está en la incubadora.` }
+    : {
+        ok: true,
+        message: `Hoy no hay huevo (había un ${result.chance}% de probabilidad). Mañana otra vez.`,
+      };
 }
