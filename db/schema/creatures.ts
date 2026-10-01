@@ -1,5 +1,5 @@
 import { sql } from 'drizzle-orm';
-import { boolean, check, index, pgTable, text, uuid } from 'drizzle-orm/pg-core';
+import { boolean, check, index, integer, pgTable, text, uuid } from 'drizzle-orm/pg-core';
 import { timestamps, tstz } from './_shared';
 import { corrals } from './corrals';
 import { elementEnum } from './enums';
@@ -108,6 +108,18 @@ export const creatures = pgTable(
      * Enferma no es muerta: la barra sigue subiendo, con el techo bajo.
      */
     sickSince: tstz('sick_since'),
+
+    /**
+     * AFINIDAD, guardada como lo GANADO y no como el valor de hoy.
+     *
+     * El presente se deriva al leer: puntos menos lo que el tiempo se llevó
+     * desde `affinity_at`. Igual que la stamina sale de `last_fed`, y por el
+     * mismo motivo — un número que alguien tiene que ir bajando necesita una
+     * tarea de fondo, y una tarea de fondo es otro reloj que puede
+     * desincronizarse.
+     */
+    affinityPoints: integer('affinity_points').notNull().default(0),
+    affinityAt: tstz('affinity_at').notNull().defaultNow(),
 
     ...timestamps,
   },

@@ -13,6 +13,7 @@
 export * from './elements';
 export * from './effects';
 export * from './schemas';
+export * from './affinity';
 export * from './health';
 export * from './stamina';
 export * from './objectives';

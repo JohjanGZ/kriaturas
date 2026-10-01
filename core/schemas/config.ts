@@ -14,6 +14,7 @@ export const CONFIG_KEYS = [
   'corrals',
   'health',
   'shop',
+  'affinity',
 ] as const;
 export type ConfigKey = (typeof CONFIG_KEYS)[number];
 export const configKeySchema = z.enum(CONFIG_KEYS);
@@ -93,6 +94,29 @@ const healthConfigSchema = z.strictObject({
  * monedas compran tiempo, nunca perdón** — quien paga se salta el camino largo,
  * y quien no, lo recorre.
  */
+/**
+ * AFINIDAD. Sube cuidando y **baja con el abandono** — la única cosa del juego
+ * que decae con el reloj, y por eso lleva un SUELO: la ausencia enfría, no
+ * borra lo que ya te ganaste.
+ */
+const affinityConfigSchema = z.strictObject({
+  maxPoints: z.number().int().min(10).max(1000).default(100),
+  /** Lo que nunca se pierde de lo ya ganado. */
+  floorPoints: z.number().int().min(0).max(1000).default(20),
+  perFeed: z.number().int().min(1).max(100).default(5),
+  perBattle: z.number().int().min(1).max(100).default(8),
+  decayPerDay: z.number().int().min(0).max(100).default(3),
+  /** A partir de aquí cuenta para el nido. */
+  highThreshold: z.number().int().min(1).max(1000).default(60),
+  chancePerHighCreature: z.number().int().min(0).max(100).default(4),
+  /**
+   * El techo. Es lo que mantiene al corral como un extra: la tienda sigue
+   * siendo el camino fiable y ninguna cantidad de kriaturas lo convierte en
+   * una fábrica de huevos.
+   */
+  maxChancePercent: z.number().int().min(0).max(100).default(20),
+});
+
 const shopConfigSchema = z.strictObject({
   /** Lo que cuesta despertar a una kriatura blanca sin pasar por misiones. */
   elementStonePriceCoins: z.number().int().min(1).max(100_000).default(300),
@@ -259,6 +283,7 @@ export const CONFIG_SCHEMAS = {
   corrals: corralsConfigSchema,
   health: healthConfigSchema,
   shop: shopConfigSchema,
+  affinity: affinityConfigSchema,
 } as const;
 
 export type StaminaConfig = z.infer<typeof staminaConfigSchema>;
@@ -268,6 +293,7 @@ export type EggsConfig = z.infer<typeof eggsConfigSchema>;
 export type CorralsConfig = z.infer<typeof corralsConfigSchema>;
 export type HealthConfig = z.infer<typeof healthConfigSchema>;
 export type ShopConfig = z.infer<typeof shopConfigSchema>;
+export type AffinityConfig = z.infer<typeof affinityConfigSchema>;
 
 export type ConfigValue<K extends ConfigKey> = z.infer<(typeof CONFIG_SCHEMAS)[K]>;
 
@@ -314,6 +340,16 @@ export const DEFAULT_CONFIG: { [K in ConfigKey]: ConfigValue<K> } = {
   },
   health: { chanceAtEmptyPercent: 20, sickCeilingPercent: 25, curePriceCoins: 150 },
   shop: { elementStonePriceCoins: 300 },
+  affinity: {
+    maxPoints: 100,
+    floorPoints: 20,
+    perFeed: 5,
+    perBattle: 8,
+    decayPerDay: 3,
+    highThreshold: 60,
+    chancePerHighCreature: 4,
+    maxChancePercent: 20,
+  },
   corrals: {
     starterCapacity: 10,
     corralsForSale: [

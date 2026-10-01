@@ -130,9 +130,19 @@ gracia del Albo en una lotería.
   también lo que dan gratis — el mismo trato que la medicina: **las monedas compran tiempo,
   nunca perdón.**
 
-> Añadir una clave a `CONFIG_KEYS` **necesita una migración**: la columna `game_configs.key` es
-> un enum de Postgres, así que sin `db:generate` el seed revienta con `invalid input value for
-> enum`. El valor por defecto de Zod cubre la lectura, no la escritura.
+> **Añadir una clave de config tiene DOS trampas, y las dos muerden en sitios distintos.**
+>
+> 1. **La escritura**: `game_configs.key` es un enum de Postgres, así que la clave nueva necesita
+>    su `db:generate` o el seed revienta con `invalid input value for enum`.
+> 2. **La lectura en PRODUCCIÓN**: allí solo corren las migraciones — el seed se lanza a mano y
+>    una vez — así que la fila simplemente no existe, y `parseConfig(key, undefined)` tiraba la
+>    página entera con *"expected object, received undefined"*. Un despliegue verde que rompe el
+>    juego.
+>
+> Por eso `loadGameConfig` lee `?? {}`: una clave sin fila cae en los defaults que Zod ya
+> declara, que es justo lo que la regla de esta casa promete. Las tres viejas (`stamina`, `play`,
+> `combat`) no tienen defaults y siguen exigiendo su fila — correcto, porque esas nunca llegaron
+> sin sembrar.
 
 ## Objectives — unlock requirements
 

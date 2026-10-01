@@ -63,6 +63,7 @@ import {
   type EggsConfig,
   type HealthConfig,
   type ShopConfig,
+  type AffinityConfig,
   type PlayConfig,
   parseConfig,
 } from "@/core/schemas/config";
@@ -102,6 +103,7 @@ export type LoadedConfig = {
   corrals: CorralsConfig;
   health: HealthConfig;
   shop: ShopConfig;
+  affinity: AffinityConfig;
   gameId: string;
 };
 
@@ -121,8 +123,21 @@ export async function loadGameConfig(
     .select()
     .from(gameConfigs)
     .where(eq(gameConfigs.gameId, game.id));
-  const value = (key: string): unknown =>
-    rows.find((row) => row.key === key)?.value;
+  /**
+   * UNA CLAVE QUE NO ESTÁ CAE EN SUS VALORES POR DEFECTO, no revienta.
+   *
+   * En producción solo corren las MIGRACIONES; el seed se lanza a mano y una
+   * vez. Así que cada clave de config nueva llegaba al servidor sin su fila y
+   * tiraba la página entera con "expected object, received undefined" — un
+   * despliegue verde que rompe el juego.
+   *
+   * `?? {}` deja que Zod rellene con los defaults que ya están declarados, que
+   * es justo lo que la regla de esta casa promete: añadir una clave está
+   * cubierto por su default. Las tres viejas (stamina, play, combat) no tienen
+   * defaults y siguen exigiendo su fila — como debe ser, porque esas nunca
+   * llegaron sin sembrar.
+   */
+  const value = (key: string): unknown => rows.find((row) => row.key === key)?.value ?? {};
 
   return {
     gameId: game.id,
@@ -133,6 +148,7 @@ export async function loadGameConfig(
     corrals: parseConfig("corrals", value("corrals")),
     health: parseConfig("health", value("health")),
     shop: parseConfig("shop", value("shop")),
+    affinity: parseConfig("affinity", value("affinity")),
   };
 }
 

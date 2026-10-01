@@ -194,8 +194,14 @@ function PathRow({ path, speciesId }: { path: PathView; speciesId: string }) {
     <tr>
       <td colSpan={4}>
         <details>
-          <summary className="small">
-            Editar «{path.name}» · {path.effects.length} poder(es)
+          <summary className="path-open">
+            ⚙ Editar <strong>{path.name}</strong> — imagen, bonus y{' '}
+            <strong>
+              {pathTier(path.targetElement as Element) === 'superior'
+                ? 'poderes de excelente'
+                : 'poderes'}
+            </strong>{' '}
+            ({path.effects.length})
           </summary>
           <PathEditForm path={path} speciesId={speciesId} />
         </details>
@@ -242,9 +248,13 @@ export function PathEditor({
         <strong>excelente</strong>, reservada a las que llevan la marca ✦.
       </p>
       <p className="small muted">
-        Abre «Editar» en cada una para ponerle su <strong>imagen</strong>, sus bonus y sus
-        poderes. Son dos dibujos distintos: una kriatura transformada que se ve igual que antes
-        es una transformación que no se nota.
+        <strong>Los poderes de cada grado se editan aquí abajo</strong>, en el ⚙ de su fila —
+        junto con su imagen y sus bonus. Los de la vía <strong>superior</strong> son los que solo
+        verá una kriatura con la marca ✦; los de la normal, todas las demás.
+      </p>
+      <p className="small muted">
+        Son dos dibujos distintos: una kriatura transformada que se ve igual que antes es una
+        transformación que no se nota.
       </p>
 
       {missingNormal ? (

@@ -1,5 +1,5 @@
 import { sql } from 'drizzle-orm';
-import { check, integer, pgTable, uniqueIndex, uuid } from 'drizzle-orm/pg-core';
+import { check, date, integer, pgTable, uniqueIndex, uuid } from 'drizzle-orm/pg-core';
 import { timestamps } from './_shared';
 import { users } from './users';
 
@@ -21,6 +21,12 @@ export const players = pgTable(
       .references(() => users.id, { onDelete: 'cascade', onUpdate: 'cascade' }),
     food: integer('food').notNull().default(0),
     coins: integer('coins').notNull().default(0),
+
+    /**
+     * El último día en que se revisó el nido. UNA tirada al día: si rodara al
+     * cargar la página, bastaría con recargar hasta que saliera huevo.
+     */
+    lastNestCheck: date('last_nest_check'),
     ...timestamps,
   },
   (t) => [
