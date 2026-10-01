@@ -43,6 +43,12 @@ export type Combatant = {
   /** Mana carried into this turn. */
   readonly mana: number;
   /**
+   * Si tiene su piedra fusionada. `undefined` se lee como SÍ, para que el bot
+   * y el simulador --que no tienen piedras-- sigan funcionando sin saber que
+   * existen.
+   */
+  readonly evolutionUnlocked?: boolean;
+  /**
    * Locks a rival power left on it.
    *
    * BLOCKED: its attack does not land — the bar still fills and still fires, but

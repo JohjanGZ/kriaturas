@@ -50,8 +50,14 @@ export type PennedCreature = {
   sickSince: Date | null;
   /** Lo que cuesta curarla de golpe, sin pasar por las misiones. */
   curePrice: number;
-  /** Lo que cuesta la piedra que despierta a una blanca. */
+  /** Lo que cuesta la piedra: despierta a una blanca y abre la evolución de cualquiera. */
   stonePrice: number;
+  /**
+   * Si tiene su piedra fusionada. Sin ella la kriatura PELEA IGUAL pero no se
+   * transforma — es un techo, no un muro, que es lo que hace que la piedra se
+   * desee en vez de estorbar.
+   */
+  evolutionUnlocked: boolean;
   /** Afinidad de HOY, 0..100, ya con lo que el tiempo se llevó descontado. */
   affinity: number;
   /** Si cuenta para el nido. */
@@ -85,6 +91,8 @@ export type CorralShelf = {
   forSale: { capacity: number; priceCoins: number }[];
   coins: number;
   food: number;
+  /** Piedras de regalo sin gastar: se usan ANTES que las monedas. */
+  freeStones: number;
   /** Plazas totales y ocupadas, para decirlo de un vistazo. */
   used: number;
   total: number;
@@ -113,6 +121,7 @@ export async function getCorralShelf(playerId: string, now: Date): Promise<Corra
       sickSince: creatures.sickSince,
       affinityPoints: creatures.affinityPoints,
       affinityAt: creatures.affinityAt,
+      unlockedAt: creatures.evolutionUnlockedAt,
       awakenedElement: creatures.element,
       speciesName: species.name,
       speciesElement: species.baseElement,
@@ -166,6 +175,7 @@ export async function getCorralShelf(playerId: string, now: Date): Promise<Corra
       sickSince: row.sickSince,
       curePrice: config.health.curePriceCoins,
       stonePrice: config.shop.elementStonePriceCoins,
+      evolutionUnlocked: row.unlockedAt !== null,
       imageUrl: null,
     };
   };
@@ -192,6 +202,7 @@ export async function getCorralShelf(playerId: string, now: Date): Promise<Corra
     })),
     coins: player.coins,
     food: player.food,
+    freeStones: player.freeStones,
     used: rows.length,
     total: pens.reduce((sum, pen) => sum + pen.capacity, 0),
   };
@@ -400,35 +411,38 @@ export async function cureCreature(
 
 export type StoneFailure =
   | 'not_yours'
-  | 'species_has_its_own_element'
-  | 'already_awakened'
+  | 'wrong_element'
+  | 'already_unlocked'
   | 'not_enough_coins';
 
 /**
- * LA PIEDRA ELEMENTAL — lo que despierta a una kriatura blanca.
+ * LA PIEDRA ELEMENTAL — el permiso para transformarse.
  *
- * Hasta ahora el Albo estaba EN el juego y no podía jugar: nacía blanco, la
- * escritura que lo despierta existía desde el primer día, y no había forma de
- * llegar a ella. Un callejón sin salida que el jugador veía en su corral.
+ * La piedra y la drakofruta hacen trabajos distintos: la piedra es el
+ * **permiso**, una vez y para siempre; la fruta es el **combustible**, cada
+ * partida. Sin piedra una kriatura alinea toda la fruta del mundo y no se
+ * transforma.
  *
- * Se compra y se usa en el mismo gesto, como la cura: no hace falta inventario
- * todavía, y meterlo antes de que haya ingredientes sería construir un almacén
- * para una sola cosa. Cuando lleguen las misiones, la piedra será además lo que
- * dan gratis — el mismo trato que la medicina.
+ * Hace DOS cosas según a quién se le dé, y eso es deliberado:
  *
- * **El elemento lo elige el jugador.** No se sortea: la gracia del Albo es
- * decidir en qué se convierte, y un sorteo convertiría la rareza en lotería.
+ * - a una kriatura normal, hay que darle **la de su propio elemento** y le
+ *   abre la evolución;
+ * - a una **blanca**, le da el elemento Y le abre la evolución de una vez. Una
+ *   sola piedra por dos efectos es la compensación por nacer inservible, y es
+ *   lo que impide que el Albo se sienta un caso aparte.
  *
- * Se escribe UNA vez, con `WHERE element IS NULL` dentro de la transacción: dos
- * piedras usadas a la vez pasarían las dos una comprobación hecha en
- * TypeScript, y la segunda no puede cobrar por nada.
+ * Se escribe una vez con `WHERE evolution_unlocked_at IS NULL` dentro de la
+ * transacción: dos piedras usadas a la vez pasarían las dos una comprobación
+ * hecha en TypeScript, y si no se escribió ninguna fila no se cobra.
  */
 export async function useElementStone(
   creatureId: string,
   playerId: string,
   element: BaseElement,
   now: Date,
-): Promise<{ ok: true; paid: number } | { ok: false; reason: StoneFailure }> {
+): Promise<
+  { ok: true; paid: number; freeUsed: boolean; awakened: boolean } | { ok: false; reason: StoneFailure }
+> {
   const db = await getDb();
   const config = await loadGameConfig();
   const price = config.shop.elementStonePriceCoins;
@@ -438,6 +452,7 @@ export async function useElementStone(
       .select({
         id: creatures.id,
         element: creatures.element,
+        unlockedAt: creatures.evolutionUnlockedAt,
         speciesElement: species.baseElement,
       })
       .from(creatures)
@@ -445,38 +460,54 @@ export async function useElementStone(
       .where(and(eq(creatures.id, creatureId), eq(creatures.playerId, playerId)))
       .limit(1);
     if (!row) return { ok: false as const, reason: 'not_yours' as const };
-
-    /** Una kriatura con elemento propio no tiene nada que decidir. */
-    if (row.speciesElement !== null) {
-      return { ok: false as const, reason: 'species_has_its_own_element' as const };
+    if (row.unlockedAt !== null) {
+      return { ok: false as const, reason: 'already_unlocked' as const };
     }
-    if (row.element !== null) {
-      return { ok: false as const, reason: 'already_awakened' as const };
+
+    /**
+     * Una blanca ACEPTA cualquier elemento: elegir es su gracia. Una normal
+     * exige el suyo — para ella la piedra no es una decisión sino una compra,
+     * y la decisión real es a cuál de tus kriaturas le inviertes.
+     */
+    const white = row.speciesElement === null && row.element === null;
+    const own = row.element ?? row.speciesElement;
+    if (!white && own !== element) {
+      return { ok: false as const, reason: 'wrong_element' as const };
     }
 
     const [player] = await tx.select().from(players).where(eq(players.id, playerId)).limit(1);
     if (!player) return { ok: false as const, reason: 'not_yours' as const };
-    if (player.coins < price) {
+
+    /** La primera es gratis: el primer bloqueo trae su propia solución. */
+    const free = player.freeStones > 0;
+    if (!free && player.coins < price) {
       return { ok: false as const, reason: 'not_enough_coins' as const };
     }
 
     await tx
       .update(players)
-      .set({ coins: player.coins - price })
+      .set(
+        free
+          ? { freeStones: player.freeStones - 1 }
+          : { coins: player.coins - price },
+      )
       .where(eq(players.id, playerId));
 
     const written = await tx
       .update(creatures)
-      .set({ element, awakenedAt: now })
-      .where(and(eq(creatures.id, creatureId), isNull(creatures.element)))
+      .set({
+        evolutionUnlockedAt: now,
+        ...(white ? { element, awakenedAt: now } : {}),
+      })
+      .where(and(eq(creatures.id, creatureId), isNull(creatures.evolutionUnlockedAt)))
       .returning({ id: creatures.id });
 
     /** La carrera la pierde la segunda: sin fila escrita, nada que cobrar. */
     if (written.length === 0) {
-      return { ok: false as const, reason: 'already_awakened' as const };
+      return { ok: false as const, reason: 'already_unlocked' as const };
     }
 
-    return { ok: true as const, paid: price };
+    return { ok: true as const, paid: free ? 0 : price, freeUsed: free, awakened: white };
   });
 }
 

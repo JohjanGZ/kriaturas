@@ -1,6 +1,8 @@
 import { eq } from 'drizzle-orm';
 import Link from 'next/link';
 import { applyAdjustment, effectiveAdjustment } from '@/core/balance';
+import { resolveElement } from '@/core/elements';
+import { staminaCeiling } from '@/core/health';
 import { deriveStamina } from '@/core/stamina';
 import { getDb } from '@/db/client';
 import { getBattleToShow, loadGameConfig } from '@/db/queries/battle';
@@ -122,6 +124,9 @@ export default async function PlayPage() {
       nickname: creatures.nickname,
       lastFed: creatures.lastFed,
       isExcellent: creatures.isExcellent,
+      sickSince: creatures.sickSince,
+      unlockedAt: creatures.evolutionUnlockedAt,
+      awakenedElement: creatures.element,
       speciesName: species.name,
       element: species.baseElement,
       attack: species.baseAttack,
@@ -136,7 +141,18 @@ export default async function PlayPage() {
   const balance = await loadSeasonBalance();
 
   const pickable: PickableCreature[] = rows.map((row) => {
-    const snapshot = deriveStamina(row.lastFed, now, config.stamina);
+    /**
+     * El techo de ESTA kriatura: enferma, la barra no llega arriba. El selector
+     * tiene que derivarla igual que `startBattle`, porque un selector que no
+     * sabe de la enfermedad ofrece una pelea que el combate luego rechaza.
+     */
+    const sick = row.sickSince !== null;
+    const snapshot = deriveStamina(
+      row.lastFed,
+      now,
+      config.stamina,
+      staminaCeiling(sick, config.health, config.stamina),
+    );
     /** Effective, not raw: an excellent creature ignores the season's nerfs. */
     const adjustment = effectiveAdjustment(adjustmentFor(balance, row.speciesId), {
       excellent: row.isExcellent,
@@ -145,7 +161,12 @@ export default async function PlayPage() {
     return {
       id: row.id,
       name: row.nickname ?? row.speciesName,
-      element: row.element,
+      /**
+       * Su elemento, no el de su especie: una blanca ya despertada pelea con lo
+       * que le escribió la piedra. Leerlo de la especie la dejaba fuera del
+       * selector para siempre aunque el combate la aceptase.
+       */
+      element: resolveElement(row.element, row.awakenedElement),
       /** Outside a battle a creature is always its base form: it looks like itself. */
       evolvedElement: null,
       attack: tuned.attack,
@@ -154,7 +175,9 @@ export default async function PlayPage() {
       manaCostDelta: adjustment.manaCostDelta,
       stamina: snapshot.current,
       maxStamina: snapshot.max,
-      canPlay: snapshot.current >= config.play.minStaminaToPlay,
+      canPlay: !sick && snapshot.current >= config.play.minStaminaToPlay,
+      sick,
+      evolutionUnlocked: row.unlockedAt !== null,
       isExcellent: row.isExcellent,
     };
   });

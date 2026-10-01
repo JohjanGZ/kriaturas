@@ -256,6 +256,12 @@ export type BattleView = {
     evolvedInBattle: boolean;
     /** The rare mark: it transforms into the SUPERIOR element instead. */
     isExcellent: boolean;
+    /**
+     * Si tiene su piedra. La fruta es el COMBUSTIBLE y la piedra el PERMISO:
+     * sin ella no aparece entre las opciones a transformar, y el servidor la
+     * rechaza igual (`no_stone`) porque la pantalla no es la que decide.
+     */
+    evolutionUnlocked: boolean;
     attack: number;
     mana: number;
     manaCost: number;
@@ -355,6 +361,7 @@ async function toView(battleId: string): Promise<BattleView | null> {
        */
       element: sql<BaseElement>`coalesce(${creatures.element}, ${species.baseElement})`,
       attack: species.baseAttack,
+      unlockedAt: creatures.evolutionUnlockedAt,
     })
     .from(battleCreatures)
     .innerJoin(creatures, eq(creatures.id, battleCreatures.creatureId))
@@ -389,7 +396,7 @@ async function toView(battleId: string): Promise<BattleView | null> {
     canEvolve:
       row.status === "active" &&
       row.fruits >= combat.fruitsToEvolve &&
-      team.some((member) => !member.evolvedInBattle),
+      team.some((member) => !member.evolvedInBattle && member.unlockedAt !== null),
     movesLeft: row.movesLeft,
     movesPerTurn: combat.movesPerTurn,
     extraMoveUsed: row.extraMoveUsed,
@@ -402,6 +409,7 @@ async function toView(battleId: string): Promise<BattleView | null> {
         : null,
       evolvedInBattle: member.evolvedInBattle,
       isExcellent: member.isExcellent,
+      evolutionUnlocked: member.unlockedAt !== null,
       attack:
         applyAdjustment(
           { attack: member.attack, manaCost: member.manaCost },
@@ -988,6 +996,7 @@ export async function playMove(
       element: sql<BaseElement>`coalesce(${creatures.element}, ${species.baseElement})`,
       attack: species.baseAttack,
       effects: species.effects,
+      evolutionUnlockedAt: creatures.evolutionUnlockedAt,
     })
     .from(battleCreatures)
     .innerJoin(creatures, eq(creatures.id, battleCreatures.creatureId))
@@ -1030,6 +1039,8 @@ export async function playMove(
       mana: member.mana,
       blockedTurns: member.blockedTurns,
       paralyzedTurns: member.paralyzedTurns,
+      /** La piedra es el permiso para transformarse. */
+      evolutionUnlocked: member.evolutionUnlockedAt !== null,
     };
   });
 
@@ -1478,7 +1489,8 @@ export type EvolveInBattleFailure =
   | "battle_finished"
   | "not_enough_fruits"
   | "not_in_battle"
-  | "already_evolved";
+  | "already_evolved"
+  | "no_stone";
 
 export type EvolveInBattleOutcome =
   | { ok: true; view: BattleView; name: string; element: string | null }

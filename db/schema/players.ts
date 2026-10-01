@@ -27,6 +27,13 @@ export const players = pgTable(
      * cargar la página, bastaría con recargar hasta que saliera huevo.
      */
     lastNestCheck: date('last_nest_check'),
+
+    /**
+     * Piedras elementales sin pagar. Empiezan en 1: la PRIMERA kriatura que
+     * eclosiona nace bloqueada, y ese primer bloqueo trae su propia solución.
+     * Se aprende el bucle entero en un gesto y solo la segunda cuesta monedas.
+     */
+    freeStones: integer('free_stones').notNull().default(0),
     ...timestamps,
   },
   (t) => [

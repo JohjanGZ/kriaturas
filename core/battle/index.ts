@@ -283,10 +283,18 @@ export function applyPlayerMove(
 export function canEvolveInBattle(state: BattleState, config: CombatConfig): boolean {
   if (state.status !== 'active') return false;
   if (state.fruits < config.fruitsToEvolve) return false;
-  return state.team.some((member) => !state.evolvedInBattle.includes(member.creatureId));
+  return state.team.some(
+    (member) =>
+      !state.evolvedInBattle.includes(member.creatureId) && member.evolutionUnlocked !== false,
+  );
 }
 
-export type EvolveInBattleRefusal = 'not_enough_fruits' | 'not_in_battle' | 'already_evolved';
+export type EvolveInBattleRefusal =
+  | 'not_enough_fruits'
+  | 'not_in_battle'
+  | 'already_evolved'
+  /** Sin su piedra fusionada: la fruta es el combustible, la piedra el permiso. */
+  | 'no_stone';
 
 export type EvolveInBattleResult =
   | { readonly ok: true; readonly state: BattleState }
@@ -307,6 +315,14 @@ export function evolveInBattle(
   }
   if (state.evolvedInBattle.includes(creatureId)) {
     return { ok: false, reason: 'already_evolved' };
+  }
+  /**
+   * LA PIEDRA ES EL PERMISO. Sin ella no hay transformación por mucha fruta que
+   * se alinee — y se refusa con su propio motivo, no con un botón que no
+   * responde: un jugador que no sabe POR QUÉ no pasa nada cree que está roto.
+   */
+  if (state.team.find((member) => member.creatureId === creatureId)?.evolutionUnlocked === false) {
+    return { ok: false, reason: 'no_stone' };
   }
   if (state.fruits < config.fruitsToEvolve) return { ok: false, reason: 'not_enough_fruits' };
 

@@ -39,6 +39,8 @@ type TeamMember = {
   evolvedInBattle: boolean;
   /** The rare mark: it transforms into the SUPERIOR element instead. */
   isExcellent: boolean;
+  /** Sin su piedra fusionada no se transforma, así que no se ofrece. */
+  evolutionUnlocked: boolean;
   attack: number;
   mana: number;
   manaCost: number;
@@ -1041,7 +1043,7 @@ export function BattleBoard({
           </span>
           <div className="evo-choice-options">
             {team
-              .filter((member) => !member.evolvedInBattle)
+              .filter((member) => !member.evolvedInBattle && member.evolutionUnlocked)
               .map((member) => (
                 <form
                   action={evolveNow}

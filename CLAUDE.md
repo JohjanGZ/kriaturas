@@ -115,20 +115,89 @@ are what the board deals and nothing else may pretend to be one.
   The species is still rolled at PURCHASE and hidden until `status = 'hatched'`, so what the
   player experiences is finding it when the egg opens, with nothing to re-roll.
 
-### La piedra elemental
+### La piedra elemental — el PERMISO para transformarse
 
-`useElementStone` la compra y la usa en el mismo gesto, desde la ficha del corral: cuatro
-botones, uno por elemento. **El jugador ELIGE en qué se convierte** — sortearlo convertiría la
-gracia del Albo en una lotería.
+La piedra y la drakofruta hacen trabajos distintos y por eso conviven: la piedra es el
+**permiso**, se fusiona una vez y para siempre; la fruta es el **combustible**, se alinea cada
+partida. **Sin piedra una kriatura alinea toda la fruta del mundo y no se transforma.**
 
+`useElementStone` la compra y la usa en el mismo gesto, desde la ficha del corral. Hace **dos
+cosas según a quién se le dé**, y esa es la respuesta a qué hacer con el Albo:
+
+| a quién | qué piedra | qué hace |
+| ------- | ---------- | -------- |
+| una kriatura corriente | **la de su propio elemento** | le abre la evolución |
+| una **blanca** | cualquiera de las cuatro | le da el elemento **y** le abre la evolución |
+
+Una sola piedra por dos efectos es la compensación por nacer inservible, y es lo que impide que
+el Albo sea un caso aparte con reglas propias: **es la misma pieza, usada por quien la necesita
+para más cosas.** Y sigue siendo el blanco el único que ELIGE — cuatro botones, porque sortearlo
+convertiría su gracia en una lotería; a una corriente la piedra no le plantea una decisión sino
+una compra, y la decisión real es *a cuál de tus kriaturas le inviertes*.
+
+- **Es un TECHO, no un muro.** Una kriatura sin piedra pelea igual: carga su barra, dispara su
+  especial, gana partidas. Lo único que no puede es transformarse. Si bloquease la pelea entera
+  sería un peaje; bloqueando solo lo mejor, es un antojo.
 - **Se compra y se usa a la vez**, como la cura. No hace falta inventario todavía, y montar un
   almacén para una sola cosa sería construir la estantería antes que los libros.
-- **Se escribe UNA vez**, con `WHERE element IS NULL` dentro de la transacción: dos piedras
-  usadas a la vez pasarían las dos una comprobación hecha en TypeScript, y la segunda no puede
-  cobrar por nada. Si no se escribió ninguna fila, no se cobra.
-- El precio vive en `shop.elementStonePriceCoins`. Cuando lleguen las misiones, la piedra será
-  también lo que dan gratis — el mismo trato que la medicina: **las monedas compran tiempo,
-  nunca perdón.**
+- **Se escribe UNA vez**, con `WHERE evolution_unlocked_at IS NULL` dentro de la transacción: dos
+  piedras usadas a la vez pasarían las dos una comprobación hecha en TypeScript, y la segunda no
+  puede cobrar por nada. Si no se escribió ninguna fila, **no se cobra**.
+- **Las gratis se gastan ANTES que las monedas** (`players.free_stones`). Quien tiene una regalada
+  no paga, y no hay que elegir entre pagar o gastar la del cajón.
+- `shop.elementStonePriceCoins` son **125**: estaba en 300 cuando la piedra era cosa del Albo —una
+  eclosión de sesenta— y ahí daba igual. Queriéndola cada kriatura, 300 la dejaba costando más que
+  el bicho (huevo 100 + electricidad 75). A 125 una kriatura nueva y transformable sale por unas
+  300 monedas, seis victorias. Cuando lleguen las misiones la piedra será también lo que dan
+  gratis — el mismo trato que la medicina: **las monedas compran tiempo, nunca perdón.**
+
+#### Dónde vive el permiso, y por qué `undefined` significa SÍ
+
+`creatures.evolution_unlocked_at` es la columna, y `Combatant.evolutionUnlocked` la lleva al
+motor. Es **opcional**, y la ausencia se lee como que sí puede:
+
+```ts
+member.evolutionUnlocked !== false   // undefined = sí
+```
+
+El simulador de terminal y el bot construyen sus combatientes a mano y no saben de piedras. Con
+el defecto al revés, un dato que nadie rellena le habría apagado la transformación a todo lo que
+no pasa por la base de datos — y se habría descubierto como "el campo Vergel ya no hace nada".
+
+**Y lo dicen los dos lados, como con el elemento repetido**: el combate lo rechaza
+(`evolveInBattle` → `no_stone`) porque es quien manda, y la pantalla deja de ofrecerla porque un
+botón que solo sirve para enseñar un error no es un botón. `canEvolveInBattle` tampoco anuncia la
+barra llena si NINGUNA del equipo lleva piedra: celebrar un recurso que no se puede gastar es
+peor que no celebrarlo.
+
+- **En el corral** la kriatura sin piedra lleva un **◆** en la esquina —arriba a la izquierda, que
+  el 🤒 ocupa la otra— y su ficha enseña el botón de fusionar. Fusionada no se dice nada: un aviso
+  permanente de algo ya resuelto es ruido.
+- **En el selector de equipo** se avisa pero **no se impide**: "◆ sin piedra: no se transforma".
+  Decirlo ahí es lo que hace que la piedra se compre antes de la pelea y no se descubra a mitad.
+
+#### La bienvenida: tres kriaturas evolucionables, y la lección en la primera eclosión
+
+Las tres de regalo nacen **con la evolución abierta**. La transformación es lo mejor que tiene el
+combate, y esconderla detrás de un paso de tutorial es guardarse la mejor carta: primero se ve,
+después se aprende lo que cuesta.
+
+La lección llega en la **primera eclosión**, que nace **bloqueada** y con una **piedra gratis**
+esperando. Para entonces el jugador ya ha visto transformarse a las suyas, así que "necesito una
+piedra" es un antojo y no un muro, y el primer bloqueo **trae su propia solución**: se aprende el
+bucle entero en un gesto y solo la SEGUNDA cuesta monedas.
+
+Tres y de elementos distintos, nunca dos iguales: un equipo son dos de elementos diferentes, así
+que dos que compartieran elemento serían un rechazo que el jugador no entiende en su primer
+minuto. Con tres distintos hay elección real —tres parejas posibles— y **le falta el cuarto**,
+que es exactamente el antojo que hace querer el primer huevo. Y ninguna es la blanca: de tres
+kriaturas una que no puede pelear mata un tercio del establo antes de empezar, y el Albo tiene
+que ser un HALLAZGO del huevo.
+
+> **Un selector que no sabe algo ofrece una pelea que el combate rechaza.** El de `/jugar` leía el
+> elemento de la ESPECIE, así que una blanca ya despertada se quedaba fuera para siempre aunque
+> `startBattle` la aceptase, y no sabía de enfermedades, así que ofrecía una enferma que el combate
+> rechazaba después. Los dos leen ahora lo mismo: `resolveElement` y el techo de `staminaCeiling`.
 
 > **Añadir una clave de config tiene DOS trampas, y las dos muerden en sitios distintos.**
 >
@@ -507,6 +576,8 @@ multiplier) and it LOOKS like one. `combat.fruitsToEvolve` is the threshold.
 
 - **It is temporary and it is not the permanent evolution.** `battle_creatures.evolved_in_battle`
   holds it; the creature row is never touched, and no wallet fruit is spent.
+- **La fruta es el combustible; el PERMISO es la piedra.** Una kriatura sin su piedra fusionada no
+  aparece entre las opciones y el servidor la rechaza igual — ver *La piedra elemental*.
 - **A creature that never locked a branch borrows its species' DEFAULT path** — the fight cannot
   stop to ask which branch to take.
 - **The bot plays by the same rule** (`rivalToEvolve`): it banks the fruit IT clears and spends it
@@ -1093,9 +1164,11 @@ cookie IS the identity, and anyone who copies it is that guest.
 - **A guest gets its OWN player and its own creatures**, never a shared demo account. One active
   battle per player is a unique index, so two people on one account would fight over the same
   row and the second would be refused with nothing on screen to explain it.
-- **Its starters are chosen from what is PUBLISHED**, one species per base element plus the white
-  one, rather than from a list of slugs the admin may have changed since. Two carry the rare
-  mark, because on a link somebody opens once, a mechanic nobody reaches may as well not exist.
+- **Its starters are chosen from what is PUBLISHED**, rather than from a list of slugs the admin
+  may have changed since: **three species of three different base elements**, already
+  evolvable, never the white one. One carries the rare mark, because on a link somebody opens
+  once, a mechanic nobody reaches may as well not exist. See *La bienvenida* above for why three
+  and why they come unlocked. It also gets a corral, an incubator and **one free stone**.
 - **The role is hard-coded to `player`**, not passed in: this function is reachable by anyone who
   opens the site, and an argument that could say `admin` would be an admin account anyone can
   mint.

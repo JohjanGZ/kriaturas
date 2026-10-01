@@ -343,7 +343,7 @@ async function seedAdmin(db: Db): Promise<string> {
 
   const [player] = await db
     .insert(players)
-    .values({ userId: user.id, food: 20, coins: 500 })
+    .values({ userId: user.id, food: 20, coins: 500, freeStones: 1 })
     .onConflictDoUpdate({
       target: players.userId,
       set: { food: 20, coins: 500 },
@@ -731,6 +731,8 @@ async function seedStarterCreature(
       speciesId,
       nickname: starter.nickname,
       isExcellent: starter.excellent ?? false,
+      /** Nacen con la evolución abierta: la transformación no se esconde. */
+      evolutionUnlockedAt: now,
       lastFed: initialAnchor(now, DEFAULT_CONFIG.stamina),
     });
     added += 1;

@@ -169,6 +169,13 @@
       "when": 1790817677737,
       "tag": "0023_medical_unicorn",
       "breakpoints": true
+    },
+    {
+      "idx": 24,
+      "version": "7",
+      "when": 1790820704669,
+      "tag": "0024_narrow_joshua_kane",
+      "breakpoints": true
     }
   ]
 }

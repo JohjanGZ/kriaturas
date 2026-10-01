@@ -4,7 +4,9 @@ import {
   applyPlayerMove,
   applyRivalMove,
   applyRivalStrike,
+  canEvolveInBattle,
   endTurn,
+  evolveInBattle,
   grantsExtraMove,
   rivalDamage,
   startBattle,
@@ -273,5 +275,77 @@ describe('mana', () => {
     expect(next.team.find((m) => m.creatureId === 'c1')?.mana).toBe(4);
     // c2 was not on the board this turn, so its bar is untouched.
     expect(next.team.find((m) => m.creatureId === 'c2')?.mana).toBe(0);
+  });
+});
+
+/**
+ * LA PIEDRA ES EL PERMISO, la fruta el combustible.
+ *
+ * Una kriatura sin su piedra fusionada pelea igual — carga su barra, dispara su
+ * especial — y lo único que no puede es transformarse. Y el rechazo vive aquí,
+ * en `/core`, no en la pantalla: la pantalla deja de ofrecerla porque es cómodo,
+ * el servidor la rechaza porque es lo que manda.
+ */
+describe('la piedra abre la transformación', () => {
+  const full = (over: { team?: Combatant[] } = {}) => ({
+    ...battle(over),
+    fruits: config.fruitsToEvolve,
+  });
+
+  it('sin piedra, no se transforma aunque la barra esté llena', () => {
+    const state = full({ team: [member({ evolutionUnlocked: false })] });
+
+    expect(canEvolveInBattle(state, config)).toBe(false);
+    const result = evolveInBattle(state, 'c1', config);
+    expect(result.ok).toBe(false);
+    expect(result.ok ? null : result.reason).toBe('no_stone');
+  });
+
+  it('con piedra, se transforma y la barra se gasta', () => {
+    const state = full({ team: [member({ evolutionUnlocked: true })] });
+
+    expect(canEvolveInBattle(state, config)).toBe(true);
+    const result = evolveInBattle(state, 'c1', config);
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.state.evolvedInBattle).toContain('c1');
+    expect(result.state.fruits).toBe(0);
+  });
+
+  it('la barra llena no se ofrece si NINGUNA del equipo lleva piedra', () => {
+    const locked = full({
+      team: [
+        member({ creatureId: 'c1', evolutionUnlocked: false }),
+        member({ creatureId: 'c2', baseElement: 'water', evolutionUnlocked: false }),
+      ],
+    });
+    expect(canEvolveInBattle(locked, config)).toBe(false);
+
+    /** Con una sola que la lleve ya hay a quién transformar. */
+    const half = full({
+      team: [
+        member({ creatureId: 'c1', evolutionUnlocked: false }),
+        member({ creatureId: 'c2', baseElement: 'water', evolutionUnlocked: true }),
+      ],
+    });
+    expect(canEvolveInBattle(half, config)).toBe(true);
+  });
+
+  it('sin el dato se lee como que SÍ puede', () => {
+    /**
+     * El simulador de terminal y el bot construyen sus combatientes a mano y no
+     * saben de piedras. `undefined` tenía que significar "sí" para no apagarle
+     * la transformación a todo lo que no pasa por la base de datos.
+     */
+    const state = full({ team: [member()] });
+    expect(member().evolutionUnlocked).toBeUndefined();
+    expect(canEvolveInBattle(state, config)).toBe(true);
+  });
+
+  it('sin piedra tampoco se gasta la fruta: el rechazo no cobra', () => {
+    const state = full({ team: [member({ evolutionUnlocked: false })] });
+    const result = evolveInBattle(state, 'c1', config);
+    expect(result.ok).toBe(false);
+    expect(state.fruits).toBe(config.fruitsToEvolve);
   });
 });

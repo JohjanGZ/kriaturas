@@ -81,7 +81,9 @@ function Grazing({
       }
       onClick={onSelect}
       aria-pressed={selected}
-      aria-label={`${creature.name}, stamina ${creature.stamina} de ${creature.maxStamina}`}
+      aria-label={`${creature.name}, stamina ${creature.stamina} de ${
+        creature.maxStamina
+      }${creature.evolutionUnlocked ? '' : ', sin piedra: no se transforma'}`}
     >
       <span className="grazing-body">
         {creature.imageUrl ? (
@@ -108,6 +110,16 @@ function Grazing({
           🤒
         </span>
       ) : null}
+      {/*
+        * SIN PIEDRA, una marca discreta. Lo que le falta se ve desde el corral
+        * sin tener que abrir cada ficha a ver cuál es, y es una esquina y no un
+        * cartel porque la kriatura funciona: solo no se transforma.
+        */}
+      {creature.evolutionUnlocked ? null : (
+        <span className="grazing-locked" aria-hidden="true">
+          ◆
+        </span>
+      )}
       {/* La afinidad, leída sin leer: la boca cambia de forma, no solo el color. */}
       <AffinityFace percent={creature.affinity} className="grazing-face" />
       <span className="grazing-name">{creature.name}</span>
@@ -268,15 +280,23 @@ export function Pen({ shelf }: { shelf: CorralShelf }) {
           </div>
 
           {/*
-            * LA PIEDRA: cuatro botones, uno por elemento. Elegir es la gracia
-            * del Albo — sortearlo lo convertiría en una lotería — y hasta que
-            * uno se pulsa, esta kriatura no puede pelear con nadie.
+            * LA PIEDRA, EN DOS PAPELES Y UN SOLO BOTÓN.
+            *
+            * A una kriatura corriente le ABRE LA EVOLUCIÓN: sin ella pelea
+            * igual, pero no se transforma. A la blanca le hace eso Y le decide
+            * el elemento de una vez, que es por lo que son cuatro botones ahí y
+            * uno aquí: la blanca ELIGE — sortearlo la convertiría en lotería —
+            * y la corriente solo puede fusionar la de su propio elemento.
+            *
+            * Fusionada no se dice nada: un aviso permanente de algo que ya está
+            * resuelto es ruido. Solo se habla cuando falta.
             */}
-          {chosen.element === null ? (
+          {chosen.evolutionUnlocked ? null : chosen.element === null ? (
             <>
               <p className="small muted">
                 Nació en blanco. Una <strong>piedra elemental</strong> decide qué es, y hasta
-                entonces no puede pelear. La elección es permanente.
+                entonces no puede pelear. La elección es permanente, y la misma piedra le abre
+                la transformación.
               </p>
               <div className="row" style={{ gap: '0.4rem', flexWrap: 'wrap' }}>
                 {(['fire', 'water', 'plant', 'psychic'] as const).map((element) => (
@@ -284,14 +304,38 @@ export function Pen({ shelf }: { shelf: CorralShelf }) {
                     <input type="hidden" name="creatureId" value={chosen.id} />
                     <input type="hidden" name="element" value={element} />
                     <Pending
-                      primary={shelf.coins >= chosen.stonePrice}
-                      label={`${element} · ${chosen.stonePrice}`}
+                      primary={shelf.freeStones > 0 || shelf.coins >= chosen.stonePrice}
+                      label={
+                        shelf.freeStones > 0
+                          ? `${element} · gratis`
+                          : `${element} · ${chosen.stonePrice}`
+                      }
                     />
                   </form>
                 ))}
               </div>
             </>
-          ) : null}
+          ) : (
+            <>
+              <p className="small muted">
+                Pelea, pero <strong>no se transforma</strong>: le falta fusionar una{' '}
+                <strong>piedra de {chosen.element}</strong>. Cada kriatura necesita la de su
+                propio elemento.
+              </p>
+              <form action={doStone}>
+                <input type="hidden" name="creatureId" value={chosen.id} />
+                <input type="hidden" name="element" value={chosen.element} />
+                <Pending
+                  primary={shelf.freeStones > 0 || shelf.coins >= chosen.stonePrice}
+                  label={
+                    shelf.freeStones > 0
+                      ? `Fusionar piedra · gratis (te queda ${shelf.freeStones})`
+                      : `Fusionar piedra de ${chosen.element} · ${chosen.stonePrice} monedas`
+                  }
+                />
+              </form>
+            </>
+          )}
 
           {chosen.sickSince ? (
             <p className="small muted">

@@ -33,6 +33,8 @@ const REASONS: Record<string, string> = {
   not_sick: 'Esa kriatura no está enferma',
   species_has_its_own_element: 'Esa kriatura ya tiene elemento propio',
   already_awakened: 'Esa kriatura ya despertó',
+  already_unlocked: 'Esa kriatura ya tiene su piedra fusionada',
+  wrong_element: 'Esa piedra no es de su elemento. Cada kriatura necesita la suya.',
   already_checked: 'Ya miraste el nido hoy. Vuelve mañana.',
   no_room: 'No hay incubadora libre donde poner un huevo',
   no_egg_type: 'No hay ningún tipo de huevo publicado',
@@ -167,12 +169,15 @@ export async function useStoneAction(
   revalidatePath('/corral');
   revalidatePath('/jugar');
 
-  return result.ok
-    ? {
-        ok: true,
-        message: `¡Despertó como ${parsed.data.element}! Pagaste ${result.paid} monedas.`,
-      }
-    : { ok: false, message: describe(result.reason) };
+  if (!result.ok) return { ok: false, message: describe(result.reason) };
+
+  const cost = result.freeUsed ? 'con tu piedra gratuita' : `por ${result.paid} monedas`;
+  return {
+    ok: true,
+    message: result.awakened
+      ? `¡Despertó como ${parsed.data.element} y ya puede transformarse! (${cost})`
+      : `Piedra fusionada ${cost}: ya puede transformarse en combate.`,
+  };
 }
 
 /**

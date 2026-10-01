@@ -478,6 +478,15 @@ export async function hatchEgg(
         playerId,
         speciesId: row.speciesId,
         corralId: home,
+        /**
+         * NACE BLOQUEADA, y ahí es donde se aprende lo de las piedras.
+         *
+         * Para cuando llega este momento el jugador YA ha visto transformarse a
+         * sus kriaturas de inicio, así que "necesito una piedra" es un antojo y
+         * no un muro. Y lleva una piedra gratis esperando: el primer bloqueo
+         * trae su propia solución.
+         */
+        evolutionUnlockedAt: null,
         lastFed: initialAnchor(now, config.stamina),
       })
       .returning();

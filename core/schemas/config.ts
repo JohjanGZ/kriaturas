@@ -118,8 +118,20 @@ const affinityConfigSchema = z.strictObject({
 });
 
 const shopConfigSchema = z.strictObject({
-  /** Lo que cuesta despertar a una kriatura blanca sin pasar por misiones. */
-  elementStonePriceCoins: z.number().int().min(1).max(100_000).default(300),
+  /**
+   * Lo que cuesta una piedra elemental comprada, sin pasar por misiones.
+   *
+   * Estaba en 300 cuando la piedra era cosa del Albo —una eclosión de sesenta—
+   * y ahí el precio de una rareza daba igual. Ahora la quiere CADA kriatura,
+   * así que 300 la dejaba costando más que el bicho: el huevo son 100 y la
+   * electricidad 75, y la piedra habría sido el doble de todo eso.
+   *
+   * A 125 una kriatura nueva y transformable sale por unas 300 monedas —seis
+   * victorias— y la piedra se lee como media docena de partidas, no como una
+   * segunda compra del tamaño de la primera. Lo que tiene que durar poco es el
+   * rato en que tienes una kriatura que todavía no se transforma.
+   */
+  elementStonePriceCoins: z.number().int().min(1).max(100_000).default(125),
 });
 
 const corralsConfigSchema = z.strictObject({
@@ -339,7 +351,7 @@ export const DEFAULT_CONFIG: { [K in ConfigKey]: ConfigValue<K> } = {
     extraMovesPerTurn: 1,
   },
   health: { chanceAtEmptyPercent: 20, sickCeilingPercent: 25, curePriceCoins: 150 },
-  shop: { elementStonePriceCoins: 300 },
+  shop: { elementStonePriceCoins: 125 },
   affinity: {
     maxPoints: 100,
     floorPoints: 20,

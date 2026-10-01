@@ -43,7 +43,17 @@ export async function createGuestPlayer(now: Date): Promise<GuestSession> {
 
     const [player] = await tx
       .insert(players)
-      .values({ userId: user.id, food: 20, coins: 500 })
+      .values({
+        userId: user.id,
+        food: 20,
+        coins: 500,
+        /**
+         * UNA PIEDRA GRATIS esperando. La primera kriatura que eclosione nace
+         * bloqueada, y ese primer bloqueo trae su propia solución: se aprende
+         * el bucle entero en un gesto y solo la SEGUNDA cuesta monedas.
+         */
+        freeStones: 1,
+      })
       .returning();
     if (!player) throw new Error('No se pudo crear el jugador de invitada');
 
@@ -54,50 +64,12 @@ export async function createGuestPlayer(now: Date): Promise<GuestSession> {
      * The seed's starters name their species; this cannot, because the database
      * behind a deploy may have been edited in the admin since. So it takes one
      * species per base element — the board deals four, and a team of two is
-     * only a choice when there is something to choose between — and the white
-     * one if the catalogue has it, because a roster that shows the mechanic
-     * teaches it for free.
+     * only a choice when there is something to choose between.
      */
-    const pool = await tx
-      .select({ id: species.id, baseElement: species.baseElement, name: species.name })
-      .from(species)
-      .where(eq(species.isPublished, true))
-      .orderBy(asc(species.name));
-
-    const perElement = new Map<string, { id: string; name: string }>();
-    for (const row of pool) {
-      if (row.baseElement === null) continue;
-      if (!perElement.has(row.baseElement)) {
-        perElement.set(row.baseElement, { id: row.id, name: row.name });
-      }
-    }
-
-    const white = pool.find((row) => row.baseElement === null);
-    const starters = [...perElement.values()];
-
     /**
-     * Two of them carry the rare mark, so the superior transformation can be
-     * seen without grinding for it. On a link somebody opens once, a mechanic
-     * nobody reaches may as well not exist.
-     */
-    const anchor = initialAnchor(now, DEFAULT_CONFIG.stamina);
-    if (starters.length > 0) {
-      await tx.insert(creatures).values(
-        starters.map((starter, index) => ({
-          playerId: player.id,
-          speciesId: starter.id,
-          nickname: starter.name,
-          isExcellent: index < 2,
-          corralId: home?.id ?? null,
-          lastFed: anchor,
-        })),
-      );
-    }
-
-    /**
-     * The corral its creatures live in, and the free incubator — both GIVEN,
-     * for the same reason: a player with neither could buy an egg and have
-     * nowhere to put it, nor anywhere for what hatches to live.
+     * El corral donde viven y la incubadora: los dos se REGALAN, por el mismo
+     * motivo — sin ellos se compra un huevo y no hay dónde ponerlo, ni dónde
+     * viva lo que salga.
      */
     const [home] = await tx
       .insert(corrals)
@@ -111,14 +83,55 @@ export async function createGuestPlayer(now: Date): Promise<GuestSession> {
       paidAmount: 0,
     });
 
-    if (white) {
-      await tx.insert(creatures).values({
-        playerId: player.id,
-        speciesId: white.id,
-        nickname: white.name,
-        corralId: home?.id ?? null,
-        lastFed: anchor,
-      });
+    const pool = await tx
+      .select({ id: species.id, baseElement: species.baseElement, name: species.name })
+      .from(species)
+      .where(eq(species.isPublished, true))
+      .orderBy(asc(species.name));
+
+
+    const perElement = new Map<string, { id: string; name: string }>();
+    for (const row of pool) {
+      if (row.baseElement === null) continue;
+      if (!perElement.has(row.baseElement)) {
+        perElement.set(row.baseElement, { id: row.id, name: row.name });
+      }
+    }
+
+    /**
+     * TRES KRIATURAS, DE TRES ELEMENTOS DISTINTOS.
+     *
+     * Distintos no es un detalle: un equipo son dos de elementos diferentes, así
+     * que si dos compartieran elemento el jugador se encontraría un rechazo que
+     * no entiende en su primer minuto. Con tres distintos tiene elección real
+     * (tres parejas posibles) y le FALTA el cuarto, que es exactamente el antojo
+     * que hace querer el primer huevo.
+     *
+     * Y ninguna es la blanca: el Albo no puede jugar, y de tres kriaturas una
+     * inservible mata un tercio del establo antes de empezar. Tiene que ser un
+     * HALLAZGO del huevo, no un regalo.
+     */
+    const starters = [...perElement.values()].slice(0, 3);
+
+    /**
+     * Nacen con la evolución ABIERTA. La transformación es lo mejor que tiene
+     * el combate: esconderla detrás de un paso de tutorial es guardarse la
+     * mejor carta. La lección de las piedras llega en la primera eclosión, con
+     * el jugador ya queriendo lo que vio.
+     */
+    const anchor = initialAnchor(now, DEFAULT_CONFIG.stamina);
+    if (starters.length > 0) {
+      await tx.insert(creatures).values(
+        starters.map((starter, index) => ({
+          playerId: player.id,
+          speciesId: starter.id,
+          nickname: starter.name,
+          isExcellent: index < 1,
+          corralId: home?.id ?? null,
+          evolutionUnlockedAt: now,
+          lastFed: anchor,
+        })),
+      );
     }
 
     return { userId: user.id, playerId: player.id };

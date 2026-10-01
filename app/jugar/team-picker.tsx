@@ -27,6 +27,10 @@ export type PickableCreature = {
   stamina: number;
   maxStamina: number;
   canPlay: boolean;
+  /** Enferma: el combate la rechaza, así que el selector tampoco la ofrece. */
+  sick: boolean;
+  /** Sin su piedra pelea igual, pero no se transforma. Se avisa, no se impide. */
+  evolutionUnlocked: boolean;
   /** The rare mark: in battle it transforms into the SUPERIOR element. */
   isExcellent: boolean;
 };
@@ -167,12 +171,22 @@ export function TeamPicker({
               <span className="small muted">
                 {white
                   ? 'Necesita una piedra elemental para poder luchar'
-                  : repeated
-                    ? `Ya llevas una kriatura de ${creature.element}: una gema cargaría las dos`
-                    : `Stamina ${creature.stamina}/${creature.maxStamina}${
-                        creature.canPlay ? '' : ' — agotada'
-                      }`}
+                  : creature.sick
+                    ? 'Enferma: cúrala en el corral antes de pelear'
+                    : repeated
+                      ? `Ya llevas una kriatura de ${creature.element}: una gema cargaría las dos`
+                      : `Stamina ${creature.stamina}/${creature.maxStamina}${
+                          creature.canPlay ? '' : ' — agotada'
+                        }`}
               </span>
+              {/*
+                * SIN PIEDRA se avisa, no se impide: pelea igual y solo pierde la
+                * transformación. Decirlo aquí es lo que hace que la piedra se
+                * compre antes de la pelea y no se descubra a mitad de ella.
+                */}
+              {creature.evolutionUnlocked || white ? null : (
+                <span className="small muted">◆ sin piedra: no se transforma</span>
+              )}
             </button>
           );
         })}

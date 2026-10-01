@@ -121,6 +121,18 @@ export const creatures = pgTable(
     affinityPoints: integer('affinity_points').notNull().default(0),
     affinityAt: tstz('affinity_at').notNull().defaultNow(),
 
+    /**
+     * CUÁNDO SE LE FUSIONÓ SU PIEDRA. Null = todavía no puede transformarse.
+     *
+     * La piedra es el PERMISO y la drakofruta es el combustible: dos recursos
+     * con trabajos distintos. Una kriatura sin piedra alinea toda la fruta que
+     * quiera y no se transforma — y el combate lo dice, no se queda callado.
+     *
+     * Permanente y por kriatura, como `is_excellent`. Por especie sería un
+     * árbol de tecnología: lo compras una vez y se acabó la demanda.
+     */
+    evolutionUnlockedAt: tstz('evolution_unlocked_at'),
+
     ...timestamps,
   },
   (t) => [

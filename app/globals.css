@@ -2428,6 +2428,21 @@ th {
   filter: drop-shadow(0 1px 2px rgb(0 0 0 / 0.7));
 }
 
+/*
+ * SIN PIEDRA. Va arriba a la izquierda para no pelearse con el 🤒, que ocupa la
+ * otra esquina — una kriatura puede estar enferma y sin piedra a la vez.
+ */
+.grazing-locked {
+  position: absolute;
+  top: -5px;
+  left: -2px;
+  font-size: 0.7rem;
+  line-height: 1;
+  color: var(--muted);
+  opacity: 0.85;
+  filter: drop-shadow(0 1px 2px rgb(0 0 0 / 0.7));
+}
+
 /* El desplegable de una vía: que se vea que hay algo dentro. */
 .path-open {
   cursor: pointer;
