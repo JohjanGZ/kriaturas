@@ -66,9 +66,18 @@ type SpeciesSeed = {
    * carácter — y eso no se puede derivar de nada.
    */
   paths?: {
-    normal: { name: string; effects: unknown[] };
-    superior: { name: string; effects: unknown[] };
+    normal: { name: string; effects: unknown[]; image?: string };
+    superior: { name: string; effects: unknown[]; image?: string };
   };
+  /**
+   * El `public_id` de la lámina, NO una URL.
+   *
+   * Lo que congela una URL es el servidor de hoy, el CDN de hoy y la
+   * transformación de hoy; un id deja que `urlFor` decida las tres al dibujar,
+   * que es como `f_auto,q_auto` llega a todas las imágenes sin migrar nada.
+   * Sale de `scripts/subir-arte.ts`.
+   */
+  image?: string;
 };
 
 const SPECIES_SEED: SpeciesSeed[] = [
@@ -332,6 +341,59 @@ const SPECIES_SEED: SpeciesSeed[] = [
     },
   },
 
+
+  /**
+   * LA PRIMERA CON ARTE DE VERDAD, y la primera en tres edades.
+   *
+   * Las tres láminas no son tres colores de lo mismo: son una CRÍA, una adulta
+   * y una coronada, que es exactamente lo que el juego pide de los dos grados.
+   * La normal conserva el fuego —otro dibujo, no otro color— y la superior se
+   * vuelve dorada con una media luna encima, que es el elemento LUZ dibujado
+   * sin que nadie se lo pidiera.
+   *
+   * Su poder es `lifesteal`, el último verbo del catálogo que no usaba nadie, y
+   * cubre el agujero que tenía el fuego: había estallido (Brasilla), control de
+   * tablero (Pirox), tempo (Ascua) y quemadura (Volcanor), y ni una sola forma
+   * de recuperar vida con fuego. Lo que quema, lo bebe.
+   *
+   * El segundo poder lleva `turn_at_least` porque esa es su historia contada en
+   * una condición: una brasa que no asusta al principio y a la que no conviene
+   * dejar que la pelea se alargue. Y es lo que la hace distinta de Brasilla,
+   * que pega lo mismo en el turno uno que en el diez.
+   */
+  {
+    slug: 'flariny',
+    manaCost: 9,
+    name: 'Flariny',
+    baseElement: 'fire',
+    hp: 30,
+    attack: 13,
+    defense: 5,
+    description: 'Cachorro de brasa. Lo que quema, lo bebe.',
+    image: 'kriaturas/flariny/d629ddd3-9f41-4248-b8f1-8c19e959b120',
+    effects: [
+      { type: 'lifesteal', target: 'self', value: 35 },
+      { type: 'damage', target: 'enemy', value: 12, condition: { turn_at_least: 4 } },
+    ],
+    paths: {
+      /** Ya no juega: la misma hambre, más grande. */
+      normal: {
+        name: 'Flarion',
+        image: 'kriaturas/flariny/da39fcf5-bdbd-4d62-9f39-37d11c4be513',
+        effects: [{ type: 'lifesteal', target: 'self', value: 20 }],
+      },
+      /** Se le enciende una corona, y por fin devuelve algo de lo que toma. */
+      superior: {
+        name: 'Flariel',
+        image: 'kriaturas/flariny/fdea739c-fe79-4b11-aca2-f8c85a0174f0',
+        effects: [
+          { type: 'lifesteal', target: 'self', value: 25 },
+          { type: 'heal', target: 'self', value: 18 },
+        ],
+      },
+    },
+  },
+
 ];
 
 type ObjectiveSeed = {
@@ -445,6 +507,7 @@ async function seedSpecies(db: Db, createdBy: string): Promise<Map<string, strin
           description: seed.description,
           isPublished: true,
           effects: parseEffectList(seed.effects),
+          baseImagePath: seed.image ?? null,
           createdBy,
         })
         .onConflictDoUpdate({
@@ -458,6 +521,12 @@ async function seedSpecies(db: Db, createdBy: string): Promise<Map<string, strin
             description: seed.description,
             isPublished: true,
             effects: parseEffectList(seed.effects),
+            /**
+             * Solo pisa el dibujo si el seed TRAE uno: así una especie a la que
+             * le subieron arte por el panel no se queda sin ella por volver a
+             * sembrar.
+             */
+            ...(seed.image ? { baseImagePath: seed.image } : {}),
           },
         })
         .returning();
@@ -566,6 +635,7 @@ async function seedSpecies(db: Db, createdBy: string): Promise<Map<string, strin
           isDefault: true,
           sortOrder: 0,
           effects: parseEffectList(seed.paths?.normal.effects ?? louder(0.5)),
+          imagePath: seed.paths?.normal.image ?? null,
         },
         {
           targetElement: superior as Element,
@@ -576,6 +646,7 @@ async function seedSpecies(db: Db, createdBy: string): Promise<Map<string, strin
           isDefault: false,
           sortOrder: 1,
           effects: parseEffectList(seed.paths?.superior.effects ?? louder(1)),
+          imagePath: seed.paths?.superior.image ?? null,
         },
       ];
 
@@ -599,6 +670,7 @@ async function seedSpecies(db: Db, createdBy: string): Promise<Map<string, strin
               isDefault: grade.isDefault,
               sortOrder: grade.sortOrder,
               effects: grade.effects,
+              ...(grade.imagePath ? { imagePath: grade.imagePath } : {}),
             },
           });
       }

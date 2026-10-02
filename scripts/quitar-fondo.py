@@ -115,6 +115,51 @@ def mascara_de_fondo(rgb: np.ndarray, fondo: np.ndarray, tolerancia: float) -> n
     return visitado, distancia
 
 
+def huecos_cerrados(
+    parecido: np.ndarray, borde_conectado: np.ndarray, area_minima: int
+) -> tuple[np.ndarray, list[int]]:
+    """
+    Bolsas del color del fondo que NO llegan al borde: el negro que queda
+    encerrado entre dos colas o dentro de un aro.
+
+    La inundación no puede alcanzarlas por definición, así que sin esto se
+    quedan como manchas oscuras que solo se ven cuando la lámina ya está sobre
+    el tema claro.
+
+    Es la parte delicada de toda la herramienta, porque un OJO también es una
+    bolsa oscura encerrada. Dos cosas lo hacen seguro: solo entran las bolsas
+    que están dentro de la tolerancia ESTRICTA del color del fondo —un ojo
+    pintado casi nunca es el negro exacto del lienzo— y cada relleno se
+    IMPRIME, con su tamaño, para que nadie se entere tarde.
+    """
+    alto, ancho = parecido.shape
+    candidato = parecido & ~borde_conectado
+    visto = np.zeros_like(candidato)
+    relleno = np.zeros_like(candidato)
+    areas: list[int] = []
+
+    for y0, x0 in zip(*np.nonzero(candidato)):
+        if visto[y0, x0]:
+            continue
+        bolsa = [(int(y0), int(x0))]
+        visto[y0, x0] = True
+        cola: deque[tuple[int, int]] = deque(bolsa)
+        while cola:
+            y, x = cola.popleft()
+            for dy, dx in ((-1, 0), (1, 0), (0, -1), (0, 1)):
+                ny, nx = y + dy, x + dx
+                if 0 <= ny < alto and 0 <= nx < ancho and candidato[ny, nx] and not visto[ny, nx]:
+                    visto[ny, nx] = True
+                    cola.append((ny, nx))
+                    bolsa.append((ny, nx))
+        if len(bolsa) >= area_minima:
+            for y, x in bolsa:
+                relleno[y, x] = True
+            areas.append(len(bolsa))
+
+    return relleno, sorted(areas, reverse=True)
+
+
 def vecindad(mascara: np.ndarray, radio: int) -> np.ndarray:
     """La máscara engordada `radio` píxeles: dónde toca el fondo."""
     crecida = mascara.copy()
@@ -135,6 +180,8 @@ def limpiar(
     suavizado: float,
     recortar: bool,
     borde_px: int,
+    area_hueco: int,
+    ancho_max: int,
 ) -> str:
     original = Image.open(ruta).convert("RGBA")
     pixeles = np.array(original)
@@ -145,6 +192,14 @@ def limpiar(
         return f"  {ruta.name}: AVISO, las esquinas no coinciden — ¿el fondo no es plano? No la toco."
 
     es_fondo, distancia = mascara_de_fondo(rgb, fondo, tolerancia)
+
+    nota = ""
+    if area_hueco > 0:
+        estricta = distancia <= min(tolerancia, 30.0)
+        relleno, areas = huecos_cerrados(estricta, es_fondo, area_hueco)
+        if areas:
+            es_fondo = es_fondo | relleno
+            nota = f" + {len(areas)} hueco(s) cerrado(s) de {', '.join(str(a) for a in areas[:4])} px"
 
     """
     El alfa: 0 en el fondo, y en la frontera una rampa según lo lejos que esté
@@ -184,11 +239,25 @@ def limpiar(
         if caja:
             imagen = imagen.crop(caja)
 
+    """
+    Y se reduce. El arte llega a 1254 px y el juego la enseña a doscientos y
+    pico en un movil: subir el original es pagar ancho de banda por pixeles que
+    nadie va a ver, y el adaptador no admite mas de 2 MB. Se reduce aqui y no al
+    servirla porque lo que se guarda es lo que viaja.
+    """
+    if ancho_max > 0 and imagen.width > ancho_max:
+        alto_nuevo = round(imagen.height * ancho_max / imagen.width)
+        imagen = imagen.resize((ancho_max, alto_nuevo), Image.LANCZOS)
+
     destino.parent.mkdir(parents=True, exist_ok=True)
     imagen.save(destino, format="PNG", optimize=True)
 
     quitado = float(es_fondo.mean()) * 100
-    return f"  {ruta.name} → {destino.name}  ({quitado:.0f}% de fondo fuera, {imagen.width}×{imagen.height})"
+    peso = destino.stat().st_size / 1024
+    return (
+        f"  {ruta.name} → {destino.name}  "
+        f"({quitado:.0f}% de fondo fuera, {imagen.width}×{imagen.height}, {peso:.0f} KB){nota}"
+    )
 
 
 def main() -> None:
@@ -223,7 +292,42 @@ def main() -> None:
         default=2,
         help="Cuántos píxeles alrededor del fondo pueden suavizarse. Lo demás es dibujo, por oscuro que sea.",
     )
+    parser.add_argument(
+        "--huecos",
+        type=int,
+        default=400,
+        help="Area minima, en pixeles, de una bolsa de fondo encerrada para rellenarla. 0 la desactiva.",
+    )
+    parser.add_argument(
+        "--ancho",
+        type=int,
+        default=768,
+        help="Ancho maximo en pixeles. 0 deja el original.",
+    )
+    parser.add_argument(
+        "--resplandor",
+        action="store_true",
+        help=(
+            "Preajuste para arte que BRILLA sobre negro: el halo se desvanece en el fondo "
+            "en vez de cortarse, asi que la banda que puede suavizarse es mucho mas ancha."
+        ),
+    )
     args = parser.parse_args()
+
+    if args.resplandor:
+        """
+        Un halo no tiene borde: es un degradado que termina en el color del
+        fondo. Con la banda estrecha de siempre, la parte media del degradado
+        -oro muy oscuro- no se parece lo bastante al negro para quitarse y se
+        queda opaca: manchas negras alrededor de la kriatura que solo aparecen
+        cuando la lamina ya esta sobre el tema claro.
+        """
+        if parser.get_default("tolerancia") == args.tolerancia:
+            args.tolerancia = 40.0
+        if parser.get_default("suavizado") == args.suavizado:
+            args.suavizado = 150.0
+        if parser.get_default("borde") == args.borde:
+            args.borde = 120
 
     entrada = Path(args.entrada)
     if not entrada.exists():
@@ -254,6 +358,8 @@ def main() -> None:
                 args.suavizado,
                 args.recortar,
                 args.borde,
+                args.huecos,
+                args.ancho,
             )
         )
 

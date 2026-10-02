@@ -17,6 +17,10 @@ next-env.d.ts
 .pglite.broken/
 .pglite.roto-*/
 
+# el arte original, a resolucion completa. Lo que entra en el juego son las
+# copias recortadas y subidas a Cloudinary, no estos archivos de 1,5 MB.
+.kriaturas/
+
 # local uploads (until R2)
 public/uploads/*
 !public/uploads/.gitkeep

@@ -1173,6 +1173,48 @@ powers, because a transformed creature that looks identical is a transformation 
 - Uploads go through the `ImageStorage` interface (`lib/storage`). Both adapters name files
   with a server-generated UUID — never the client's filename — and re-check type and size.
 
+### El arte: de la lámina al juego, en dos pasos
+
+El arte llega como PNG grandes sobre **fondo negro plano**, en `.kriaturas/<slug>/`
+(`base.png`, `evolucion.png`, `exelent.png` — las tres grafías de *excelent* se aceptan). Esa
+carpeta está en `.gitignore`: los originales pesan 1,5 MB cada uno y lo que el juego necesita son
+las copias.
+
+```
+python scripts/quitar-fondo.py .kriaturas --salida .kriaturas/listas --resplandor
+npx tsx scripts/subir-arte.ts .kriaturas/listas
+```
+
+**Son dos pasos porque son dos trabajos**, y el primero hay que MIRARLO antes de mandar nada a un
+servidor. El segundo imprime los `public_id` ya con la forma de las líneas del seed.
+
+`quitar-fondo.py` no borra un color: **inunda desde el borde**. La diferencia no es académica —
+«quitar todo lo negro» le come las alas a una kriatura de ópalo negro, los ojos a cualquiera y el
+contorno a todas. El fondo es lo que está pegado al borde, no lo que es oscuro. Tres cosas más,
+cada una por un fallo que se vio en pantalla:
+
+- **al borde medio transparente se le DESCUENTA el fondo** (`c = (observado − fondo·(1−a)) / a`),
+  o la lámina llega con una orla oscura que solo aparece sobre el tema claro;
+- **solo se suaviza lo que TOCA al fondo** (`--borde`). Suavizar por parecido de color a secas le
+  ponía medio alfa a cualquier píxel oscuro, incluido el de mitad de un ala: contorno perfecto y
+  agujeros por dentro;
+- **`--resplandor`** para el arte que brilla. Un halo no tiene borde, es un degradado que termina
+  en el fondo, y con la banda estrecha de siempre la parte media —oro muy oscuro— no se parece lo
+  bastante al negro para irse y se queda como una mancha;
+- **los huecos CERRADOS se rellenan** (`--huecos`), el negro atrapado entre dos colas donde la
+  inundación no llega. Es la parte delicada, porque un ojo también es una bolsa oscura encerrada:
+  por eso solo entran las que están dentro de la tolerancia estricta del color del fondo, y cada
+  relleno se imprime con su tamaño.
+
+Y se reduce a 768 px (`--ancho`): el juego la enseña a doscientos y pico en un móvil, y el
+adaptador no admite más de 2 MB.
+
+**Lo que se guarda es el `public_id`, nunca una URL** — la regla de siempre, y es lo que hace que
+`f_auto,q_auto` llegue a todas: las láminas de Flariny pesan 659 KB en PNG y se sirven en 147 KB.
+El seed las lleva en `SpeciesSeed.image` y `paths.normal/superior.image`, y **solo pisa el dibujo
+si el seed trae uno**, para que una especie con arte subida por el panel no se quede desnuda por
+volver a sembrar.
+
 ### Images: the disk locally, Cloudinary on a server
 
 `lib/storage/index.ts` is the only place that chooses, the same shape as `db/client.ts`, and
