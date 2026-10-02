@@ -1188,6 +1188,14 @@ npx tsx scripts/subir-arte.ts .kriaturas/listas
 **Son dos pasos porque son dos trabajos**, y el primero hay que MIRARLO antes de mandar nada a un
 servidor. El segundo imprime los `public_id` ya con la forma de las líneas del seed.
 
+**El prompt es la pieza, no el modelo.** El arte se genera desde una web, así que lo único que
+mantiene a cuarenta kriaturas pareciendo del mismo juego es repetir el mismo texto:
+`arte/ESTILO.md` guarda el preámbulo fijo, la paleta por elemento y cómo pedir las dos
+evoluciones **a partir de la lámina base** y no desde cero — que es lo único que hace que las tres
+sean el mismo animal a tres estados. Tres líneas de ese preámbulo no son estéticas y no se pueden
+quitar: el fondo negro plano es lo que permite recortar, y el «sin texto» y el «sin sombra» son
+cosas que, una vez dibujadas, se quedan pegadas para siempre.
+
 `quitar-fondo.py` no borra un color: **inunda desde el borde**. La diferencia no es académica —
 «quitar todo lo negro» le come las alas a una kriatura de ópalo negro, los ojos a cualquiera y el
 contorno a todas. El fondo es lo que está pegado al borde, no lo que es oscuro. Tres cosas más,
