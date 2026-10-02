@@ -56,6 +56,19 @@ type SpeciesSeed = {
   description: string;
   manaCost: number;
   effects: unknown[];
+  /**
+   * Nombres y poderes PROPIOS de cada vía, en lugar de los derivados.
+   *
+   * Por defecto una vía se llama "<especie> mayor" y repite el poder de la
+   * especie más flojo o más fuerte, que es lo correcto para un roster de
+   * relleno: una kriatura transformada tiene que sentirse ella misma, más alta.
+   * Una kriatura de autor quiere lo contrario — que cada forma tenga nombre y
+   * carácter — y eso no se puede derivar de nada.
+   */
+  paths?: {
+    normal: { name: string; effects: unknown[] };
+    superior: { name: string; effects: unknown[] };
+  };
 };
 
 const SPECIES_SEED: SpeciesSeed[] = [
@@ -264,6 +277,61 @@ const SPECIES_SEED: SpeciesSeed[] = [
     description: 'Ojo que no duerme. Golpea fuerte y se cura al hacerlo.',
     effects: [{ type: 'damage', target: 'enemy', value: 30 }, { type: 'heal', target: 'self', value: 10 }],
   },
+
+  /**
+   * LA JOYA DEL ROSTER.
+   *
+   * Es un ÓPALO: sílice con agua dentro, sin estructura cristalina, y su juego
+   * de color sale de una rejilla de esferas microscópicas que parte la luz en
+   * parches en vez de en un barrido. De ahí las alas — no un rosa plano, sino
+   * paneles que se encienden por separado.
+   *
+   * Y el ópalo trae de serie las dos cosas que esta kriatura necesitaba:
+   *
+   * 1. **el ópalo NEGRO es la variedad rara** — la misma piedra con el fondo
+   *    oscuro y el fuego diez veces más visible — así que la vía superior, la
+   *    que solo alcanzan las excelentes, no tiene que inventarse nada;
+   * 2. **un ópalo se cuartea si se seca** y pierde el fuego para siempre, que
+   *    es literalmente la regla de enfermar: si la dejas seca, puede enfermar.
+   *    No es una metáfora puesta encima, es lo que le pasa a su material.
+   *
+   * Su poder es `fruit_block`, el único del juego: el rival no acumula
+   * drakofruta, así que NO SE TRANSFORMA. Eso no es control por control — es su
+   * carácter hecho regla. Es vanidosa: que alguien se ponga a brillar mientras
+   * ella está en el aire le parece de un gusto espantoso.
+   *
+   * No pega. Ataque bajo, defensa la más baja del corral y la barra más cara
+   * del elemento: todo su valor está en negar y en ser la única que lo hace.
+   * Que una rareza sea además la que más daño mete es como se arruina un
+   * roster, y la temporada ya existe para subirla si hace falta.
+   */
+  {
+    slug: 'maryx',
+    manaCost: 12,
+    name: 'Maryx',
+    baseElement: 'psychic',
+    hp: 24,
+    attack: 10,
+    defense: 3,
+    description: 'Un ópalo con opinión. Mientras vuela, nadie más se transforma.',
+    effects: [
+      { type: 'fruit_block', target: 'enemy', duration_turns: 3 },
+      { type: 'cleanse', target: 'self' },
+    ],
+    paths: {
+      /** Las alas se cierran en capa: no se defiende, se ofende. */
+      normal: {
+        name: 'Maryxel',
+        effects: [{ type: 'shield', target: 'self', value: 14, duration_turns: 2 }],
+      },
+      /** Ópalo negro: deja de negar y empieza a quedarse con lo que arranca. */
+      superior: {
+        name: 'Maryxia',
+        effects: [{ type: 'lifesteal', target: 'self', value: 40 }],
+      },
+    },
+  },
+
 ];
 
 type ObjectiveSeed = {
@@ -491,23 +559,23 @@ async function seedSpecies(db: Db, createdBy: string): Promise<Map<string, strin
       const grades = [
         {
           targetElement: seed.baseElement as Element,
-          name: `${seed.name} mayor`,
+          name: seed.paths?.normal.name ?? `${seed.name} mayor`,
           hpBonus: 10,
           attackBonus: 5,
           defenseBonus: 3,
           isDefault: true,
           sortOrder: 0,
-          effects: parseEffectList(louder(0.5)),
+          effects: parseEffectList(seed.paths?.normal.effects ?? louder(0.5)),
         },
         {
           targetElement: superior as Element,
-          name: `${seed.name} ${superior}`,
+          name: seed.paths?.superior.name ?? `${seed.name} ${superior}`,
           hpBonus: 13,
           attackBonus: 8,
           defenseBonus: 6,
           isDefault: false,
           sortOrder: 1,
-          effects: parseEffectList(louder(1)),
+          effects: parseEffectList(seed.paths?.superior.effects ?? louder(1)),
         },
       ];
 
@@ -633,8 +701,26 @@ async function seedEggs(db: Db, speciesIds: Map<string, string>): Promise<void> 
    * `albo` is the rarest thing in the pool: about one hatch in sixty. It is the
    * white one, and finding it has to feel like finding something — a common
    * blank creature would just be an inconvenience with an extra step.
+   *
+   * `maryx` lo comparte, y además **no entra en el huevo de bienvenida**
+   * (`RARE_SLUGS`). Es la única diferencia real entre las dos bolsas y es
+   * deliberada: el huevo barato existe para que la primera eclosión llegue
+   * pronto, no para repartir la joya del roster. Una rareza que puede salir en
+   * la compra de 50 monedas no es una rareza, es una tirada de bienvenida — y
+   * la que sale ahí tiene que poder salir otra vez, o el jugador que la saca el
+   * primer día se queda sin nada que perseguir.
    */
-  const weights: Record<string, number> = { albo: 1, mentix: 1, onirio: 1, pirox: 2, marelo: 2 };
+  const weights: Record<string, number> = {
+    albo: 1,
+    maryx: 1,
+    mentix: 1,
+    onirio: 1,
+    pirox: 2,
+    marelo: 2,
+  };
+
+  /** Las que el huevo barato NO reparte. */
+  const RARE_SLUGS = new Set(['maryx']);
 
   for (const [slug, speciesId] of speciesIds) {
     await db
@@ -676,6 +762,7 @@ async function seedEggs(db: Db, speciesIds: Map<string, string>): Promise<void> 
   if (!starter) throw new Error('Could not seed the starter egg type');
 
   for (const [slug, speciesId] of speciesIds) {
+    if (RARE_SLUGS.has(slug)) continue;
     await db
       .insert(eggTypeSpecies)
       .values({ eggTypeId: starter.id, speciesId, weight: weights[slug] ?? 4 })

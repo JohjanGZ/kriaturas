@@ -722,6 +722,53 @@ survives `block_attack`**, and it does not spend the shield it walked past eithe
 `damage_by_type` keeps the blockable channel and its `enemy_element` condition — it is the
 counter-pick, not the needle.
 
+### Una RAREZA se expresa en la bolsa, nunca en los números
+
+La tentación con una kriatura especial es darle las mejores estadísticas, y eso arruina un
+roster: a partir de ahí hay una correcta y dieciséis de relleno, y la temporada tiene que
+salir a apagar fuegos que nos encendimos nosotros. Lo raro se dice en **tres sitios, y
+ninguno es el ataque**:
+
+1. **el peso en la bolsa del huevo** — `maryx` y `albo` van a 1 contra 4, una eclosión de
+   cincuenta y seis;
+2. **de qué bolsa sale** — `RARE_SLUGS` la deja fuera del **huevo de bienvenida**. Es la única
+   diferencia entre las dos bolsas y es deliberada: el huevo barato existe para que la primera
+   eclosión llegue pronto, no para repartir la joya. Una rareza que puede salir en la compra de
+   50 monedas no es una rareza, y el jugador que la saca el primer día se queda sin nada que
+   perseguir;
+3. **un poder que no tiene nadie más** — `fruit_block` es suyo y de nadie, y vale más que
+   cualquier cifra porque es la única respuesta del juego a que el rival se transforme.
+
+### Maryx — la kriatura de autor
+
+Es la primera que no es relleno, y la única del seed con **nombres y poderes propios por vía**
+(`SpeciesSeed.paths`). El resto deriva la vía de la especie —"<nombre> mayor", el mismo poder más
+flojo o más fuerte— que es lo correcto para un roster amplio: transformarse tiene que sentirse
+como ser uno mismo, más alto. Una kriatura con carácter quiere lo contrario, y eso no se deriva
+de nada.
+
+| forma | nombre | elemento | poder |
+| ----- | ------ | -------- | ----- |
+| base | **Maryx** | psychic | `fruit_block` 3 turnos + `cleanse` |
+| normal | **Maryxel** | psychic | `shield` 14 / 2 turnos |
+| superior ✦ | **Maryxia** | astral | `lifesteal` 40 |
+
+**Es un ÓPALO, no nácar**, y la diferencia da la kriatura entera. El nácar es un brillo liso que
+recorre la superficie; el ópalo parte la luz en **parches** —una rejilla de esferas de sílice— y
+por eso sus alas no son un rosa plano sino paneles que se encienden por separado. El material
+traía de serie las dos cosas que hacían falta:
+
+- **el ópalo NEGRO es la variedad rara**, la misma piedra con el fondo oscuro y el fuego diez
+  veces más visible, así que `Maryxia` —la vía que solo alcanzan las excelentes— no se inventa
+  nada: ya es la versión cara de lo que era;
+- **un ópalo se cuartea si se seca** y pierde el fuego para siempre, que es literalmente *si la
+  dejas seca, puede enfermar*. No es una metáfora puesta encima: es lo que le pasa a su material.
+
+Y el poder es su carácter hecho regla. Es vanidosa, así que lo primero que hace al llenar la
+barra no es golpear: es **apagar a los demás**. No pega —ataque bajo, la defensa más baja del
+corral y la barra más cara de su elemento— porque todo su valor está en negar y en ser la única
+que lo hace.
+
 ## Campos — the battlefield as an opponent
 
 A second mode. `/jugar` offers **Empezar partida** (the ordinary fight) and **Jugar en un
