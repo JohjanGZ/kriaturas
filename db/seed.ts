@@ -343,13 +343,11 @@ const SPECIES_SEED: SpeciesSeed[] = [
 
 
   /**
-   * LA PRIMERA CON ARTE DE VERDAD, y la primera en tres edades.
+   * LA PRIMERA CON ARTE DE VERDAD.
    *
-   * Las tres láminas no son tres colores de lo mismo: son una CRÍA, una adulta
-   * y una coronada, que es exactamente lo que el juego pide de los dos grados.
-   * La normal conserva el fuego —otro dibujo, no otro color— y la superior se
-   * vuelve dorada con una media luna encima, que es el elemento LUZ dibujado
-   * sin que nadie se lo pidiera.
+   * El convenio de las láminas es `base.png` = forma inicial, y de ahí salen
+   * las otras dos: `evolucion.png` para la vía normal y `exelent.png` para la
+   * superior. El nombre del archivo manda, no lo que parezca el dibujo.
    *
    * Su poder es `lifesteal`, el último verbo del catálogo que no usaba nadie, y
    * cubre el agujero que tenía el fuego: había estallido (Brasilla), control de
@@ -370,7 +368,7 @@ const SPECIES_SEED: SpeciesSeed[] = [
     attack: 13,
     defense: 5,
     description: 'Cachorro de brasa. Lo que quema, lo bebe.',
-    image: 'kriaturas/flariny/d629ddd3-9f41-4248-b8f1-8c19e959b120',
+    image: 'kriaturas/flariny/fdea739c-fe79-4b11-aca2-f8c85a0174f0',
     effects: [
       { type: 'lifesteal', target: 'self', value: 35 },
       { type: 'damage', target: 'enemy', value: 12, condition: { turn_at_least: 4 } },
@@ -379,13 +377,13 @@ const SPECIES_SEED: SpeciesSeed[] = [
       /** Ya no juega: la misma hambre, más grande. */
       normal: {
         name: 'Flarion',
-        image: 'kriaturas/flariny/da39fcf5-bdbd-4d62-9f39-37d11c4be513',
+        image: 'kriaturas/flariny/d629ddd3-9f41-4248-b8f1-8c19e959b120',
         effects: [{ type: 'lifesteal', target: 'self', value: 20 }],
       },
       /** Se le enciende una corona, y por fin devuelve algo de lo que toma. */
       superior: {
         name: 'Flariel',
-        image: 'kriaturas/flariny/fdea739c-fe79-4b11-aca2-f8c85a0174f0',
+        image: 'kriaturas/flariny/da39fcf5-bdbd-4d62-9f39-37d11c4be513',
         effects: [
           { type: 'lifesteal', target: 'self', value: 25 },
           { type: 'heal', target: 'self', value: 18 },
