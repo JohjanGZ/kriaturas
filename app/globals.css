@@ -478,11 +478,23 @@ th {
   width: 100%;
   max-width: 84px;
   height: auto;
+  /* Una lámina no es cuadrada como el SVG: que no se deforme al encajarla. */
+  object-fit: contain;
   filter: drop-shadow(0 4px 6px rgb(0 0 0 / 0.5));
 }
 
 /* Each lineup looks across the divider at the other. */
-.arena-mine .fighter-art {
+/*
+ * QUE SE MIREN. El rival va a la izquierda y los tuyos a la derecha, así que
+ * para que se encaren uno de los dos lados tiene que ir del revés.
+ *
+ * Todas las láminas miran a la IZQUIERDA por convenio — se normaliza al
+ * importarlas, no aquí — de modo que los tuyos ya están bien y es el rival el
+ * que se voltea. Antes se volteaba el tuyo, que era indiferente mientras el
+ * dibujo era un SVG simétrico y deja de serlo en cuanto hay arte de verdad:
+ * media plantilla peleaba de espaldas.
+ */
+.arena-foes .fighter-art {
   transform: scaleX(-1);
 }
 
@@ -1283,6 +1295,7 @@ th {
 }
 
 .creature-thumb {
+  object-fit: contain;
   width: 100%;
   height: 120px;
 }
@@ -2316,6 +2329,7 @@ th {
 }
 
 .grazing-art {
+  object-fit: contain;
   width: 54px;
   height: 54px;
   display: block;

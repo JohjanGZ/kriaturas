@@ -5,7 +5,8 @@ import Link from 'next/link';
 import { useFormStatus } from 'react-dom';
 import type { CorralShelf, PennedCreature } from '@/db/queries/corral';
 import { AffinityFace, affinityLabel } from '../affinity-face';
-import { CreatureArt, type ArtElement } from '../creature-art';
+import type { ArtElement } from '../creature-art';
+import { CreatureFace } from '../creature-face';
 import {
   type CorralActionState,
   buyCorralAction,
@@ -86,15 +87,12 @@ function Grazing({
       }${creature.evolutionUnlocked ? '' : ', sin piedra: no se transforma'}`}
     >
       <span className="grazing-body">
-        {creature.imageUrl ? (
-          <img className="grazing-art" src={creature.imageUrl} alt="" />
-        ) : (
-          <CreatureArt
-            element={(creature.element ?? 'none') as ArtElement}
-            name={creature.name}
-            className="grazing-art"
-          />
-        )}
+        <CreatureFace
+          imageUrl={creature.imageUrl}
+          element={(creature.element ?? 'none') as ArtElement}
+          name={creature.name}
+          className="grazing-art"
+        />
       </span>
 
       {/* La barra no pasea con el bicho: se queda quieta bajo él y se lee. */}
@@ -245,7 +243,8 @@ export function Pen({ shelf }: { shelf: CorralShelf }) {
       {chosen ? (
         <section className="card care-card">
           <div className="row" style={{ alignItems: 'center', gap: '0.7rem' }}>
-            <CreatureArt
+            <CreatureFace
+              imageUrl={chosen.imageUrl}
               element={(chosen.element ?? 'none') as ArtElement}
               name={chosen.name}
               className="creature-thumb"

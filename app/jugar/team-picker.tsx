@@ -2,7 +2,8 @@
 
 import { useActionState, useState } from 'react';
 import { useFormStatus } from 'react-dom';
-import { CreatureArt, type ArtElement } from '../creature-art';
+import type { ArtElement } from '../creature-art';
+import { CreatureFace } from '../creature-face';
 import type { BattleMode } from '@/core/fields';
 import { type BattleActionState, startBattleAction } from './actions';
 
@@ -33,6 +34,8 @@ export type PickableCreature = {
   evolutionUnlocked: boolean;
   /** The rare mark: in battle it transforms into the SUPERIOR element. */
   isExcellent: boolean;
+  /** El dibujo de verdad, o null mientras la especie no tenga arte. */
+  imageUrl: string | null;
 };
 
 function StartButton({
@@ -139,7 +142,8 @@ export function TeamPicker({
               disabled={!usable}
               style={{ textAlign: 'left', cursor: usable ? 'pointer' : 'not-allowed' }}
             >
-              <CreatureArt
+              <CreatureFace
+                imageUrl={creature.imageUrl}
                 element={(creature.evolvedElement ?? creature.element ?? 'none') as ArtElement}
                 name={creature.name}
                 className="creature-thumb"

@@ -71,6 +71,7 @@ import {
 import { canPlay } from "@/core/stamina";
 import type { StaminaConfig } from "@/core/schemas/config";
 import { violates } from "@/lib/errors";
+import { imageStorage } from "@/lib/storage";
 import { getDb } from "../client";
 import {
   battleCreatures,
@@ -256,6 +257,8 @@ export type BattleView = {
     evolvedInBattle: boolean;
     /** The rare mark: it transforms into the SUPERIOR element instead. */
     isExcellent: boolean;
+    /** El dibujo de verdad, ya resuelto a URL. Null mientras no haya arte. */
+    imageUrl: string | null;
     /**
      * Si tiene su piedra. La fruta es el COMBUSTIBLE y la piedra el PERMISO:
      * sin ella no aparece entre las opciones a transformar, y el servidor la
@@ -362,6 +365,7 @@ async function toView(battleId: string): Promise<BattleView | null> {
       element: sql<BaseElement>`coalesce(${creatures.element}, ${species.baseElement})`,
       attack: species.baseAttack,
       unlockedAt: creatures.evolutionUnlockedAt,
+      imagePath: species.baseImagePath,
     })
     .from(battleCreatures)
     .innerJoin(creatures, eq(creatures.id, battleCreatures.creatureId))
@@ -409,6 +413,12 @@ async function toView(battleId: string): Promise<BattleView | null> {
         : null,
       evolvedInBattle: member.evolvedInBattle,
       isExcellent: member.isExcellent,
+      /**
+       * La de la ESPECIE, no la de la vía: aquí se dibuja la kriatura que
+       * eligió el jugador. La lámina de la forma transformada la enseña la
+       * ceremonia, que es donde el cambio es el acontecimiento.
+       */
+      imageUrl: member.imagePath ? imageStorage().urlFor(member.imagePath) : null,
       evolutionUnlocked: member.unlockedAt !== null,
       attack:
         applyAdjustment(
@@ -625,6 +635,8 @@ export async function startBattle(
       /** Cheaper than the species price: a rival has no effects to make up for it. */
       manaCost: rivalManaCost,
       mana: startingMana(rivalManaCost, combat),
+      /** Su dibujo, copiado como el ataque: la fila es el rival entero. */
+      imagePath: row.baseImagePath ?? null,
     };
   });
 

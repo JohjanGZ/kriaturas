@@ -4,6 +4,7 @@ import { startTransition, useActionState, useEffect, useRef, useState } from 're
 import { flushSync, useFormStatus } from 'react-dom';
 import type { StoredBoard, StoredField, StoredRival } from '@/core/schemas/battle';
 import { CreatureArt, type ArtElement } from '../creature-art';
+import { CreatureFace } from '../creature-face';
 import { Gem, type GemKind } from '../gem';
 import {
   type BattleActionState,
@@ -41,6 +42,8 @@ type TeamMember = {
   isExcellent: boolean;
   /** Sin su piedra fusionada no se transforma, así que no se ofrece. */
   evolutionUnlocked: boolean;
+  /** El dibujo de verdad, o null mientras la especie no tenga arte. */
+  imageUrl: string | null;
   attack: number;
   mana: number;
   manaCost: number;
@@ -152,7 +155,8 @@ export function BattleBoard({
 }: {
   battleId: string;
   board: StoredBoard;
-  rivals: StoredRival[];
+  /** El rival ya con su dibujo resuelto: el tablero es cliente y no puede. */
+  rivals: (StoredRival & { imageUrl: string | null })[];
   playerHp: number;
   playerMaxHp: number;
   opponentHp: number;
@@ -988,7 +992,8 @@ export function BattleBoard({
                 fighterNodes.current.set(foe.id, node);
               }}
             >
-              <CreatureArt
+              <CreatureFace
+                imageUrl={foe.imageUrl}
                 element={foe.element as ArtElement}
                 name={foe.name}
                 className="fighter-art"
@@ -1016,7 +1021,8 @@ export function BattleBoard({
                 fighterNodes.current.set(member.creatureId, node);
               }}
             >
-              <CreatureArt
+              <CreatureFace
+                imageUrl={member.imageUrl}
                 element={(member.evolvedElement ?? member.element) as ArtElement}
                 name={member.name}
                 className="fighter-art"

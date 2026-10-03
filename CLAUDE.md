@@ -1223,6 +1223,30 @@ El seed las lleva en `SpeciesSeed.image` y `paths.normal/superior.image`, y **so
 si el seed trae uno**, para que una especie con arte subida por el panel no se quede desnuda por
 volver a sembrar.
 
+#### El arte se DIBUJA, y todas miran a la izquierda
+
+Durante un tiempo el arte subida se guardaba y no se enseñaba en ninguna parte: el corral leía
+`base_image_path` de la base de datos y acto seguido escribía `imageUrl: null`, y la arena y el
+selector llamaban siempre al SVG. Una lámina en el CDN y en la fila que no se dibuja es trabajo
+tirado, y el fallo es **invisible** — todo parece correcto porque el relleno siempre dibuja algo.
+
+`app/creature-face.tsx` es ahora el único sitio que decide: la lámina si la hay, el SVG si no. El
+relleno deja de ser «lo que se ve» para ser lo que siempre debió ser, **lo que se ve MIENTRAS no
+haya dibujo**.
+
+**Y todas las láminas miran a la IZQUIERDA.** No es estética: en la arena el rival va a la
+izquierda y los tuyos a la derecha, así que uno de los dos lados tiene que ir del revés para que
+se encaren. Si cada dibujo mirase hacia donde quiso el generador, media plantilla pelearía de
+espaldas.
+
+- la norma se aplica al **IMPORTAR** (`quitar-fondo.py --voltear`), no al dibujar: hacerlo en el
+  CSS obligaría a una columna «hacia dónde mira» y a cuatro pantallas preguntándola;
+- con todo mirando a la izquierda, el que se voltea es **el rival** (`.arena-foes .fighter-art`).
+  Antes se volteaba el tuyo, que daba igual mientras el dibujo era un SVG simétrico y deja de dar
+  igual en cuanto hay arte de verdad;
+- el rival lleva su lámina **copiada en la fila** (`storedRivalSchema.imagePath`), como el ataque
+  y el coste de barra, con su `default` para que las batallas en curso sigan leyéndose.
+
 ### Images: the disk locally, Cloudinary on a server
 
 `lib/storage/index.ts` is the only place that chooses, the same shape as `db/client.ts`, and

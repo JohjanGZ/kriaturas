@@ -182,6 +182,7 @@ def limpiar(
     borde_px: int,
     area_hueco: int,
     ancho_max: int,
+    voltear: bool,
 ) -> str:
     original = Image.open(ruta).convert("RGBA")
     pixeles = np.array(original)
@@ -245,6 +246,19 @@ def limpiar(
     nadie va a ver, y el adaptador no admite mas de 2 MB. Se reduce aqui y no al
     servirla porque lo que se guarda es lo que viaja.
     """
+    """
+    TODAS MIRAN A LA IZQUIERDA.
+
+    En la arena el rival va a la izquierda y los tuyos a la derecha, así que el
+    juego voltea un lado para que se encaren. Eso solo funciona si sabe hacia
+    dónde mira el dibujo, y un generador devuelve lo que le apetece. La norma se
+    aplica AQUÍ, una vez, y no al dibujar: si cada pantalla tuviera que saber
+    hacia dónde mira cada kriatura, haría falta una columna y cuatro sitios
+    preguntándola.
+    """
+    if voltear:
+        imagen = imagen.transpose(Image.FLIP_LEFT_RIGHT)
+
     if ancho_max > 0 and imagen.width > ancho_max:
         alto_nuevo = round(imagen.height * ancho_max / imagen.width)
         imagen = imagen.resize((ancho_max, alto_nuevo), Image.LANCZOS)
@@ -305,6 +319,14 @@ def main() -> None:
         help="Ancho maximo en pixeles. 0 deja el original.",
     )
     parser.add_argument(
+        "--voltear",
+        action="store_true",
+        help=(
+            "Refleja la lamina en horizontal. El convenio es que TODAS miren a la izquierda, "
+            "porque la arena voltea un lado para que los dos equipos se encaren."
+        ),
+    )
+    parser.add_argument(
         "--resplandor",
         action="store_true",
         help=(
@@ -360,6 +382,7 @@ def main() -> None:
                 args.borde,
                 args.huecos,
                 args.ancho,
+                args.voltear,
             )
         )
 

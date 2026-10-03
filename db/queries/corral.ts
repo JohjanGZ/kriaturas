@@ -10,6 +10,7 @@ import { applyAdjustment, effectiveAdjustment } from '@/core/balance';
 import { careDateFor, rollSpeciesFromPool } from '@/core/eggs';
 import { staminaCeiling } from '@/core/health';
 import { deriveStamina } from '@/core/stamina';
+import { imageStorage } from '@/lib/storage';
 import { getDb } from '../client';
 import {
   corrals,
@@ -137,6 +138,7 @@ export async function getCorralShelf(playerId: string, now: Date): Promise<Corra
 
   /** La temporada se aplica donde el jugador ELIGE, no solo donde se resuelve. */
   const balance = await loadSeasonBalance();
+  const storage = imageStorage();
 
   /** Stamina is DERIVED for this render, never read from a column. */
   const toView = (row: (typeof rows)[number]): PennedCreature => {
@@ -173,10 +175,15 @@ export async function getCorralShelf(playerId: string, now: Date): Promise<Corra
       maxStamina: stamina.max,
       rested: !sick && stamina.current >= config.play.minStaminaToPlay,
       sickSince: row.sickSince,
+      /**
+       * El dibujo de verdad. Antes era `null` fijo, así que el corral leía la
+       * columna y la tiraba: toda la arte subida quedaba guardada y sin
+       * enseñar, y no se notaba porque el relleno siempre dibuja algo.
+       */
+      imageUrl: row.imagePath ? storage.urlFor(row.imagePath) : null,
       curePrice: config.health.curePriceCoins,
       stonePrice: config.shop.elementStonePriceCoins,
       evolutionUnlocked: row.unlockedAt !== null,
-      imageUrl: null,
     };
   };
 

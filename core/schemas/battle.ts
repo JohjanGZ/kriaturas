@@ -72,6 +72,14 @@ export const storedRivalSchema = z.strictObject({
    */
   manaCost: z.number().int().min(1).max(100).default(12),
   mana: z.number().int().min(0).max(1000).default(0),
+  /**
+   * Su dibujo, copiado en la fila como el ataque y el coste de barra.
+   *
+   * Va con default porque los schemas son estrictos y las batallas escritas
+   * antes de que existiera este campo tienen que seguir leyéndose: una clave
+   * nueva sin default tira todas las partidas en curso.
+   */
+  imagePath: z.string().max(300).nullable().default(null),
   /** Transformed by the board's fruit, for this battle only. */
   evolvedInBattle: z.boolean().default(false),
   /** Statuses your powers left on it. Defaulted, so older rows still parse. */

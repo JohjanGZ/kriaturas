@@ -90,7 +90,10 @@ export default async function PlayPage() {
         <BattleBoard
           battleId={active.id}
           board={active.board}
-          rivals={active.rivals}
+          rivals={active.rivals.map((foe) => ({
+            ...foe,
+            imageUrl: foe.imagePath ? storage.urlFor(foe.imagePath) : null,
+          }))}
           playerHp={active.playerHp}
           playerMaxHp={active.playerMaxHp}
           opponentHp={active.opponentHp}
@@ -127,6 +130,7 @@ export default async function PlayPage() {
       sickSince: creatures.sickSince,
       unlockedAt: creatures.evolutionUnlockedAt,
       awakenedElement: creatures.element,
+      imagePath: species.baseImagePath,
       speciesName: species.name,
       element: species.baseElement,
       attack: species.baseAttack,
@@ -175,6 +179,7 @@ export default async function PlayPage() {
       manaCostDelta: adjustment.manaCostDelta,
       stamina: snapshot.current,
       maxStamina: snapshot.max,
+      imageUrl: row.imagePath ? storage.urlFor(row.imagePath) : null,
       canPlay: !sick && snapshot.current >= config.play.minStaminaToPlay,
       sick,
       evolutionUnlocked: row.unlockedAt !== null,
