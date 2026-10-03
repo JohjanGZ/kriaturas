@@ -94,10 +94,26 @@ export type CorralShelf = {
   food: number;
   /** Piedras de regalo sin gastar: se usan ANTES que las monedas. */
   freeStones: number;
+  /** El fondo del cercado, ya resuelto a URL. Null deja el degradado de siempre. */
+  backgroundUrl: string | null;
   /** Plazas totales y ocupadas, para decirlo de un vistazo. */
   used: number;
   total: number;
 };
+
+/**
+ * El fondo admite un `public_id` o una ruta directa de `public/`, y lo que las
+ * distingue es la barra inicial: nada que empiece por `/` o por `http` pasa por
+ * el adaptador, porque ya es una dirección.
+ */
+function resolveBackground(
+  value: string | null,
+  storage: { urlFor: (key: string) => string },
+): string | null {
+  if (!value) return null;
+  if (value.startsWith('/') || value.startsWith('http')) return value;
+  return storage.urlFor(value);
+}
 
 export async function getCorralShelf(playerId: string, now: Date): Promise<CorralShelf | null> {
   const db = await getDb();
@@ -210,6 +226,7 @@ export async function getCorralShelf(playerId: string, now: Date): Promise<Corra
     coins: player.coins,
     food: player.food,
     freeStones: player.freeStones,
+    backgroundUrl: resolveBackground(config.corrals.backgroundImage, storage),
     used: rows.length,
     total: pens.reduce((sum, pen) => sum + pen.capacity, 0),
   };

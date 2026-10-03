@@ -36,9 +36,14 @@ export default async function CorralPage() {
   const shelf = await getCorralShelf(player.id, new Date());
   if (!shelf) redirect('/jugar');
 
+  /**
+   * Sin `shell` y sin `<h1>`: la columna de 1100 px y el título costaban ancho
+   * y alto justo en la pantalla cuyo contenido ES el sitio. El nombre del
+   * corral ya va flotando sobre el cercado, igual que el del campo sobre el
+   * tablero.
+   */
   return (
-    <main className="shell">
-      <h1>Corral</h1>
+    <main className="corral-page">
       <Pen shelf={shelf} />
     </main>
   );

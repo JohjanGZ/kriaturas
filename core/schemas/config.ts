@@ -137,6 +137,17 @@ const shopConfigSchema = z.strictObject({
 const corralsConfigSchema = z.strictObject({
   /** Plazas del corral que se regala al empezar. */
   starterCapacity: z.number().int().min(1).max(100).default(10),
+  /**
+   * EL FONDO DEL CORRAL, a pantalla completa.
+   *
+   * Admite las dos formas a propósito: un `public_id` de Cloudinary —subido con
+   * `scripts/subir-arte.ts`, que es lo que querrá quien cambie el fondo a
+   * menudo— o una ruta que empiece por `/`, para un archivo dejado en `public/`.
+   * Es UNA imagen y montarle un subidor propio sería construir la estantería
+   * antes que los libros; aceptar la ruta directa deja ponerla sin cuenta de
+   * nada.
+   */
+  backgroundImage: z.string().max(300).nullable().default(null),
   corralsForSale: z
     .array(
       z.strictObject({
@@ -364,6 +375,7 @@ export const DEFAULT_CONFIG: { [K in ConfigKey]: ConfigValue<K> } = {
   },
   corrals: {
     starterCapacity: 10,
+    backgroundImage: null,
     corralsForSale: [
       { capacity: 10, priceCoins: 600 },
       { capacity: 20, priceCoins: 2000 },

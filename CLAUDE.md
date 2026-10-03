@@ -400,7 +400,31 @@ animals live.
 
 **Selecting one opens the care card**, docked at the bottom rather than floating over the pen:
 a popover would cover exactly what you just tapped, and on a phone the thumb is already in that
-half of the screen.
+half of the screen. Con el cercado a pantalla completa va **fija al pie de la ventana**
+(`.care-dock`), porque en el flujo caía fuera de vista — tocabas una kriatura y no pasaba nada
+visible. Y su retrato está acotado a 76 px: cada píxel que crece la tarjeta es una kriatura menos
+que se ve pasear detrás.
+
+#### El cercado ES la pantalla
+
+Un corral es un SITIO, y un sitio de 190 px dentro de una columna de 1100 se lee como la
+miniatura de un sitio. Ahora ocupa la ventana entera (`calc(100dvh - 3.25rem)`, **`dvh` y no
+`vh`** porque en un móvil la barra del navegador aparece y desaparece y con `vh` el cercado se
+sale por debajo cada vez que lo hace), y todo lo que antes iba encima **flota**: el nombre del
+corral en una chapa a la izquierda, la bolsa a la derecha, los avisos sobre el cercado. Cada fila
+que se quitó de encima era altura robada al único contenido que esta pantalla tiene.
+
+- **El fondo es una imagen a pantalla completa**, `config.corrals.backgroundImage`. Admite un
+  `public_id` de Cloudinary o una ruta que empiece por `/` para un archivo de `public/`: es UNA
+  imagen, y montarle un subidor propio sería construir la estantería antes que los libros.
+- **`cover`, nunca `contain`.** Un paisaje con franjas vacías a los lados deja de leerse como el
+  sitio donde están y pasa a leerse como un cuadro colgado.
+- **Y lleva velo**, por lo mismo que el del tablero: a plena fuerza el fondo se come a las
+  kriaturas, y las kriaturas son el juego. El velo es un pseudoelemento que pinta después de los
+  hijos, así que las kriaturas llevan `z-index` — sin él, el paisaje las entierra.
+- **Los carriles llegan al 74%**, no al 68%: con el rango de la caja baja, nueve kriaturas se
+  apelotonaban en el tercio de arriba de una pantalla entera. No llegan al 100 para dejarle sitio
+  a la ficha.
 
 > **Never call a helper that opens its own connection inside a transaction.** `hatchEgg` asked
 > `corralWithRoom` for a place from inside `db.transaction`, and PGlite — one process — simply

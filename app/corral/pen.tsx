@@ -47,7 +47,14 @@ function wanderOf(id: string): { lane: number; delay: number; duration: number; 
   let hash = 0;
   for (const char of id) hash = (hash * 31 + char.charCodeAt(0)) % 100_000;
   return {
-    lane: 6 + (hash % 62),
+    /**
+     * El carril, en porcentaje de la altura. Va hasta el 74% y no hasta el 68%
+     * porque el cercado ya no es una caja de 190 px: con el rango viejo, nueve
+     * kriaturas se apelotonaban en el tercio de arriba de una pantalla entera y
+     * los dos tercios de abajo quedaban desiertos. No llega al 100 para dejar
+     * sitio a la ficha de cuidado, que se ancla al pie.
+     */
+    lane: 6 + (hash % 68),
     delay: -(hash % 17),
     duration: 16 + (hash % 13),
     bob: 2.4 + ((hash >> 3) % 14) / 10,
@@ -144,10 +151,17 @@ export function Pen({ shelf }: { shelf: CorralShelf }) {
 
   return (
     <>
-      <p className="small muted">
-        {shelf.used}/{shelf.total} plazas ocupadas · comida <strong>{shelf.food}</strong> ·
-        monedas <strong>{shelf.coins}</strong>
-      </p>
+      {/*
+        * LA BOLSA, flotando arriba a la derecha.
+        *
+        * Como fila encima del cercado costaba su altura y, peor, empujaba el
+        * cercado fuera de la ventana: la pantalla cuyo contenido es un SITIO
+        * acababa con el sitio cortado por abajo. Flotando no cuesta nada y se
+        * lee donde ya está el ojo cuando vas a comprar algo.
+        */}
+      <div className="pen-purse">
+        {shelf.used}/{shelf.total} plazas · {shelf.food} comida · {shelf.coins} monedas
+      </div>
 
       {feed.message ? (
         <p className={`notice ${feed.ok ? 'notice-ok' : 'notice-error'}`}>{feed.message}</p>
@@ -166,40 +180,30 @@ export function Pen({ shelf }: { shelf: CorralShelf }) {
       ) : null}
 
       {/*
-        * EL NIDO. La probabilidad se enseña: un dado escondido no se distingue
-        * de estar haciendo algo mal, y aquí lo que sube la cifra --cuidar a las
-        * kriaturas-- es justo lo que queremos que el jugador entienda.
+        * EL CERCADO ES LA PANTALLA, no una caja dentro de ella.
+        *
+        * Un corral es un SITIO, y un sitio de 190 píxeles dentro de una columna
+        * de 1100 se lee como una miniatura de un sitio. A pantalla completa las
+        * kriaturas tienen por dónde pasear de verdad y el fondo puede ser un
+        * paisaje en vez de una textura.
+        *
+        * El nombre y las plazas FLOTAN sobre él, como la chapa del campo sobre
+        * el tablero: encima costaban una fila de altura cada uno, y aquí la
+        * altura es justo lo que se está repartiendo.
         */}
-      <section className="card">
-        <div className="row" style={{ justifyContent: 'space-between', alignItems: 'baseline' }}>
-          <h2 style={{ margin: 0 }}>El nido</h2>
-          <span className="small muted">
-            {shelf.nest.high} con afinidad alta · {shelf.nest.chance}% hoy
-          </span>
-        </div>
-        <p className="small muted">
-          Las kriaturas a las que cuidas y con las que juegas pueden poner un huevo. Cuantas más
-          tengas contentas, más probable — con un tope del 20%.
-        </p>
-        {shelf.nest.checkedToday ? (
-          <p className="small muted">Ya miraste hoy. Vuelve mañana.</p>
-        ) : (
-          <form action={doNest}>
-            <Pending primary label="Mirar el nido" />
-          </form>
-        )}
-      </section>
-
       {shelf.corrals.map((pen) => (
-        <section key={pen.id} className="card">
-          <div className="row" style={{ justifyContent: 'space-between', alignItems: 'baseline' }}>
-            <h2 style={{ margin: 0 }}>{pen.name}</h2>
-            <span className="small muted">
-              {pen.creatures.length}/{pen.capacity} plazas
+        <section key={pen.id} className="pen-stage">
+          <div
+            className={`pen${shelf.backgroundUrl ? ' pen-art' : ''}`}
+            style={
+              shelf.backgroundUrl
+                ? ({ '--pen-art': `url(${JSON.stringify(shelf.backgroundUrl)})` } as React.CSSProperties)
+                : undefined
+            }
+          >
+            <span className="pen-chip">
+              {pen.name} · {pen.creatures.length}/{pen.capacity}
             </span>
-          </div>
-
-          <div className="pen">
             {pen.creatures.length === 0 ? (
               <p className="pen-empty small muted">Vacío. Aquí caerán las que eclosionen.</p>
             ) : (
@@ -217,12 +221,16 @@ export function Pen({ shelf }: { shelf: CorralShelf }) {
       ))}
 
       {shelf.loose.length > 0 ? (
-        <section className="card">
-          <h2>Sueltas</h2>
-          <p className="small muted">
-            Nacieron antes de que existieran los corrales. Entrarán en uno en cuanto haya sitio.
-          </p>
-          <div className="pen">
+        <section className="pen-stage">
+          <div
+            className={`pen${shelf.backgroundUrl ? ' pen-art' : ''}`}
+            style={
+              shelf.backgroundUrl
+                ? ({ '--pen-art': `url(${JSON.stringify(shelf.backgroundUrl)})` } as React.CSSProperties)
+                : undefined
+            }
+          >
+            <span className="pen-chip">Sueltas · entrarán en un corral en cuanto haya sitio</span>
             {shelf.loose.map((creature) => (
               <Grazing
                 key={creature.id}
@@ -241,7 +249,7 @@ export function Pen({ shelf }: { shelf: CorralShelf }) {
         * está en esa mitad de la pantalla.
         */}
       {chosen ? (
-        <section className="card care-card">
+        <section className="card care-card care-dock">
           <div className="row" style={{ alignItems: 'center', gap: '0.7rem' }}>
             <CreatureFace
               imageUrl={chosen.imageUrl}
@@ -367,9 +375,34 @@ export function Pen({ shelf }: { shelf: CorralShelf }) {
             </Link>
           </div>
         </section>
-      ) : (
-        <p className="small muted">Toca una kriatura para cuidarla.</p>
-      )}
+      ) : null}
+
+      <div className="corral-panels">
+      {/*
+        * EL NIDO. La probabilidad se enseña: un dado escondido no se distingue
+        * de estar haciendo algo mal, y aquí lo que sube la cifra --cuidar a las
+        * kriaturas-- es justo lo que queremos que el jugador entienda.
+        */}
+      <section className="card">
+        <div className="row" style={{ justifyContent: 'space-between', alignItems: 'baseline' }}>
+          <h2 style={{ margin: 0 }}>El nido</h2>
+          <span className="small muted">
+            {shelf.nest.high} con afinidad alta · {shelf.nest.chance}% hoy
+          </span>
+        </div>
+        <p className="small muted">
+          Las kriaturas a las que cuidas y con las que juegas pueden poner un huevo. Cuantas más
+          tengas contentas, más probable — con un tope del 20%.
+        </p>
+        {shelf.nest.checkedToday ? (
+          <p className="small muted">Ya miraste hoy. Vuelve mañana.</p>
+        ) : (
+          <form action={doNest}>
+            <Pending primary label="Mirar el nido" />
+          </form>
+        )}
+      </section>
+
 
       <section className="card">
         <h2>Más corrales</h2>
@@ -386,6 +419,7 @@ export function Pen({ shelf }: { shelf: CorralShelf }) {
           ))}
         </div>
       </section>
+      </div>
     </>
   );
 }
